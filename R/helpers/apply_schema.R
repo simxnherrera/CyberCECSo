@@ -4,7 +4,9 @@ apply_schema <- function(conn, schema_path = SCHEMA_PATH) {
   }
 
   schema_text <- readLines(schema_path, warn = FALSE)
-  statements <- parse_statements(schema_text)
+  statement <- parse_statements(schema_text)
 
-  invisible(lapply(statements, function(stmt) DBI::dbExecute(conn, stmt)))
+  if (nzchar(statement)) {
+    DBI::dbExecute(conn, statement)
+  }
 }
