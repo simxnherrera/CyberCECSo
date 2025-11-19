@@ -88,5 +88,62 @@ ui <- page_fluid(
         col_widths = c(4, 8)
       )
     )
+    ,
+    # Pestaña unificada de Inventario y Movimientos
+    tabPanel(
+      "Inventario y Movimientos",
+      layout_columns(
+        # Columna principal con la tabla de inventario
+        card(
+          card_header("Inventario General"),
+          p("Selecciona un producto para ver su historial o registrar un movimiento. Haz doble click en una celda para editarla."),
+          DTOutput("tabla_inventario")
+        ),
+        
+        # Columna lateral con detalles y acciones
+        card(
+          # Usamos un navset dentro de la card para organizar las acciones
+          navset_card_tab(
+            title = uiOutput("detalle_titulo"), # Título dinámico
+            # Pestaña para registrar un nuevo movimiento
+            tabPanel(
+              "Registrar Movimiento",
+              selectInput(
+                "mov_producto",
+                "Producto",
+                choices = c("Seleccionar producto" = "")
+              ),
+              selectInput(
+                "mov_tipo",
+                "Tipo de Movimiento",
+                choices = c(
+                  "Seleccionar tipo" = "",
+                  "Entrada (manual, compra)" = "entrada",
+                  "Salida (venta)" = "salida",
+                  "Ajuste (pérdida, corrección)" = "ajuste",
+                  "Vencimiento" = "vencimiento"
+                )
+              ),
+              numericInput(
+                "mov_cantidad",
+                "Cantidad",
+                value = 1,
+                min = 1,
+                step = 1
+              ),
+              textAreaInput("mov_nota", "Notas (opcional)"),
+              actionButton("mov_guardar", "Registrar Movimiento")
+            ),
+            # Pestaña para ver el historial del producto seleccionado
+            tabPanel(
+              "Historial de Movimientos",
+              DTOutput("tabla_movimientos_producto")
+            )
+          )
+        ),
+        
+        col_widths = c(8, 4) # Damos más espacio a la tabla principal
+      )
+    )
   )
 )

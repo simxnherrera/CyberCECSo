@@ -79,7 +79,7 @@ server <- function(input, output, session) {
   observeEvent(input$p_guardar, {
     req(input$p_nombre, input$p_unidad)
 
-    insert_producto(
+    id_producto_nuevo <- insert_producto(
       conn,
       list(
         nombre_producto = input$p_nombre,
@@ -105,7 +105,12 @@ server <- function(input, output, session) {
       )
     )
 
+    # Inicializar el inventario para el nuevo producto
+    insert_inventario_inicial(conn, id_producto_nuevo)
+
+    # Actualizar las listas reactivas
     productos(fetch_productos(conn))
+    inventario(fetch_inventario(conn))
     showNotification("Producto guardado", type = "message")
 
     updateTextInput(session, "p_nombre", value = "")
@@ -117,4 +122,140 @@ server <- function(input, output, session) {
     updateCheckboxInput(session, "p_perecedero", value = FALSE)
     updateCheckboxInput(session, "p_activo", value = TRUE)
   })
+
+  # lógica de inventario
+  # --------------------
+
+  # cargar lista inicial de inventario
+  inventario <- reactiveVal(fetch_inventario(conn))
+
+  # renderizar tabla de inventario con DT (editable)
+  output$tabla_inventario <- renderDT({
+    datatable(
+      inventario() %>% select(-id_producto), # Ocultamos el ID en la vista
+      selection = "single", # Permitimos seleccionar una sola fila
+      editable = list(target = "cell", disable = list(columns = c(0, 1))), # id_producto y nombre_producto no editables
+      options = list(pageLength = 10),
+      rownames = FALSE
+    )
+  })
+
+  # manejar la edición de celdas en la tabla de inventario
+  observeEvent(input$tabla_inventario_cell_edit, {
+    info <- input$tabla_inventario_cell_edit
+    row <- info$row
+    col <- info$col
+    value <- info$value
+
+    current_inventario <- inventario()
+    id_producto_editado <- current_inventario$id_producto[row]
+    col_name <- names(current_inventario)[col + 1] # +1 porque DT es 0-indexado para columnas
+
+    # Actualizar la base de datos
+    update_inventario_db(conn, id_producto_editado, col_name, value)
+
+    # Actualizar el reactiveVal para reflejar el cambio en la UI
+    current_inventario[row, col_name] <- value
+    inventario(fetch_inventario(conn)) # Recargamos para consistencia
+
+    showNotification(paste("Inventario actualizado para producto ID:", id_producto_editado), type = "message")
+  })
+
+  # lógica de movimientos de stock
+  # ------------------------------
+
+  # Valor reactivo para guardar el ID del producto seleccionado en la tabla de inventario
+  producto_seleccionado_id <- reactiveVal(NULL)
+
+  # Cargar TODOS los movimientos una sola vez
+  movimientos <- reactiveVal(fetch_movimientos(conn))
+
+  # Llenar el selector de productos para movimientos
+  observe({
+    prod <- productos()
+    product_choices <- if (nrow(prod)) {
+      setNames(prod$id_producto, prod$nombre_producto)
+    } else {
+      NULL
+    }
+    updateSelectInput(
+      session,
+      "mov_producto",
+      choices = c("Seleccionar producto" = "", product_choices)
+    )
+  })
+
+  # Cuando el usuario selecciona una fila en la tabla de inventario...
+  observeEvent(input$tabla_inventario_rows_selected, {
+    fila_seleccionada <- input$tabla_inventario_rows_selected
+    id_seleccionado <- inventario()$id_producto[fila_seleccionada]
+    producto_seleccionado_id(id_seleccionado)
+
+    # Actualizar también el selectInput en el formulario de registro
+    updateSelectInput(session, "mov_producto", selected = id_seleccionado)
+  })
+
+  # Título dinámico para la card de detalles
+  output$detalle_titulo <- renderUI({
+    id <- producto_seleccionado_id()
+    if (is.null(id)) {
+      h5("Seleccione un producto")
+    } else {
+      nombre_prod <- productos() %>%
+        filter(id_producto == id) %>%
+        pull(nombre_producto)
+      h5(paste("Acciones para:", nombre_prod))
+    }
+  })
+
+  # Renderizar la tabla de historial SOLO para el producto seleccionado
+  output$tabla_movimientos_producto <- renderDT({
+    req(producto_seleccionado_id()) # Requiere que un producto esté seleccionado
+
+    movimientos_filtrados <- movimientos() %>%
+      filter(id_producto == producto_seleccionado_id()) %>%
+      select(-nombre_producto, -id_producto) # Ya sabemos el producto, no repetimos info
+
+    datatable(
+      movimientos_filtrados,
+      options = list(pageLength = 5, searching = FALSE, info = FALSE),
+      rownames = FALSE
+    )
+  })
+
+  # guardar nuevo movimiento en la base de datos
+  observeEvent(input$mov_guardar, {
+    # Requerir que un producto esté seleccionado y los campos del form estén llenos
+    req(input$mov_producto, input$mov_tipo, input$mov_cantidad)
+
+    tryCatch({
+      # Llama a la función de DB para insertar el movimiento y actualizar el inventario
+      insert_movimiento_db(conn, list(
+        id_producto = as.integer(input$mov_producto),
+        tipo_movimiento = input$mov_tipo,
+        cantidad = input$mov_cantidad,
+        nota = input$mov_nota
+      ))
+
+      # Actualizar los reactiveVals para que las tablas se refresquen
+      inventario(fetch_inventario(pool))
+      movimientos(fetch_movimientos(pool))
+      showNotification("Movimiento registrado con éxito.", type = "message")
+
+      # Limpiar formulario
+      updateSelectInput(session, "mov_producto", selected = "")
+      updateSelectInput(session, "mov_tipo", selected = "")
+      updateNumericInput(session, "mov_cantidad", value = 1)
+      updateTextAreaInput(session, "mov_nota", value = "")
+    }, error = function(e) {
+      showNotification(paste("Error al registrar el movimiento:", e$message), type = "error")
+    })
+  })
+
+  # También necesitamos cargar los helpers nuevos en global.R
+  # source("R/helpers/fetch_inventario.R")
+  # source("R/helpers/fetch_movimientos.R")
+  # source("R/helpers/insert_inventario_inicial.R")
+  # source("R/helpers/insert_movimiento_db.R")
+  # source("R/helpers/update_inventario_db.R")
 }

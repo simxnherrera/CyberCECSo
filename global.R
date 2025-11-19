@@ -18,6 +18,11 @@ source("R/helpers/fetch_productos.R")
 source("R/helpers/insert_proveedor.R")
 source("R/helpers/insert_producto.R")
 source("R/helpers/list_proveedores_options.R")
+source("R/helpers/fetch_inventario.R")
+source("R/helpers/fetch_movimientos.R")
+source("R/helpers/insert_inventario_inicial.R")
+source("R/helpers/insert_movimiento_db.R")
+source("R/helpers/update_inventario_db.R")
 
 # crear el pool de la base de datos
 pool <- connect_database()
