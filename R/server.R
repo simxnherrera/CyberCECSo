@@ -1,11 +1,23 @@
 server <- function(input, output, session) {
-  conn <- connect_database()
+  # usar el pool de conexiones global
+  conn <- pool
 
-  # proveedores
+  # lógica de proveedores
+  # ---------------------
+
+  # cargar lista inicial de proveedores
   proveedores <- reactiveVal(fetch_proveedores(conn))
 
-  output$tabla_proveedores <- renderTable(proveedores())
+  # renderizar tabla de proveedores con DT
+  output$tabla_proveedores <- renderDT({
+    datatable(
+      proveedores(),
+      selection = "single",
+      options = list(pageLength = 10)
+    )
+  })
 
+  # guardar nuevo proveedor en la base de datos
   observeEvent(input$pr_guardar, {
     req(input$pr_nombre)
 
@@ -32,12 +44,20 @@ server <- function(input, output, session) {
     updateTextAreaInput(session, "pr_notas", value = "")
   })
 
-  # productos
+  # lógica de productos
+  # -------------------
+
+  # cargar lista inicial de productos
   productos <- reactiveVal(fetch_productos(conn))
 
+  # actualizar selector de proveedores cuando cambie la lista
   observe({
     prov <- proveedores()
-    provider_choices <- if (nrow(prov)) setNames(prov$id_proveedor, prov$nombre) else NULL
+    provider_choices <- if (nrow(prov)) {
+      setNames(prov$id_proveedor, prov$nombre)
+    } else {
+      NULL
+    }
     updateSelectInput(
       session,
       "p_proveedor",
@@ -46,8 +66,16 @@ server <- function(input, output, session) {
     )
   })
 
-  output$tabla_productos <- renderTable(productos())
+  # renderizar tabla de productos con DT
+  output$tabla_productos <- renderDT({
+    datatable(
+      productos(),
+      selection = "single",
+      options = list(pageLength = 10)
+    )
+  })
 
+  # guardar nuevo producto en la base de datos
   observeEvent(input$p_guardar, {
     req(input$p_nombre, input$p_unidad)
 
@@ -55,10 +83,22 @@ server <- function(input, output, session) {
       conn,
       list(
         nombre_producto = input$p_nombre,
-        id_proveedor = if (nzchar(input$p_proveedor)) as.integer(input$p_proveedor) else NA,
+        id_proveedor = if (nzchar(input$p_proveedor)) {
+          as.integer(input$p_proveedor)
+        } else {
+          NA
+        },
         unidad_medida = input$p_unidad,
-        precio_compra = ifelse(is.na(input$p_precio_compra), NA, input$p_precio_compra),
-        precio_venta = ifelse(is.na(input$p_precio_venta), NA, input$p_precio_venta),
+        precio_compra = ifelse(
+          is.na(input$p_precio_compra),
+          NA,
+          input$p_precio_compra
+        ),
+        precio_venta = ifelse(
+          is.na(input$p_precio_venta),
+          NA,
+          input$p_precio_venta
+        ),
         categoria = input$p_categoria,
         perecedero = as.integer(isTRUE(input$p_perecedero)),
         activo = as.integer(isTRUE(input$p_activo))
@@ -77,11 +117,4 @@ server <- function(input, output, session) {
     updateCheckboxInput(session, "p_perecedero", value = FALSE)
     updateCheckboxInput(session, "p_activo", value = TRUE)
   })
-
-  session$onSessionEnded(function() {
-    if (DBI::dbIsValid(conn)) {
-      DBI::dbDisconnect(conn)
-    }
-  })
 }
-
