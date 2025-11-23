@@ -22,25 +22,23 @@ register_adjustment <- function(
                 product_id,
                 type,
                 quantity,
-                if (is.na(batch)) NA else batch,
-                if (is.na(expiry)) NA else as.character(expiry),
-                if (is.na(location)) NA else location,
+                batch,
+                if (is.null(expiry) || is.na(expiry)) {
+                    NA
+                } else {
+                    as.character(expiry)
+                },
+                location,
                 reason
             )
         )
 
         # 2. actualizar inventario
-        # determinar cambio de cantidad basado en el tipo
+        # La cantidad ya viene con el signo correcto desde mod_inventario
         qty_change <- quantity
-        if (type %in% c("salida", "vencimiento")) {
-            # siempre egreso: forzamos signo negativo
-            qty_change <- -abs(quantity)
-        } else if (type == "entrada") {
-            # siempre ingreso: forzamos signo positivo
-            qty_change <- abs(quantity)
-        } else if (type == "ajuste") {
-            # ajuste respeta el signo que venga desde la UI (permite +/-)
-            qty_change <- quantity
+
+        if (is.na(type)) {
+            stop("Tipo de movimiento no puede ser NA")
         }
 
         # verificar si la fila existe
@@ -56,6 +54,11 @@ register_adjustment <- function(
 
         if (nrow(current_row) > 0) {
             current_qty <- current_row$cantidad_actual[1]
+
+            if (is.na(qty_change)) {
+                stop("Error interno: qty_change es NA")
+            }
+
             if (!is.na(current_qty) && (current_qty + qty_change) < 0) {
                 stop("Stock insuficiente en ese lote/ubicación.")
             }
@@ -79,7 +82,7 @@ register_adjustment <- function(
             )
         } else {
             # no fila: solo permitimos crear si qty_change es positivo o cero
-            if (qty_change < 0) {
+            if (is.na(qty_change) || qty_change < 0) {
                 stop("Stock insuficiente: lote/ubicación no existe.")
             }
             DBI::dbExecute(
@@ -91,9 +94,13 @@ register_adjustment <- function(
                 params = list(
                     product_id,
                     qty_change,
-                    if (is.na(batch)) NA else batch,
-                    if (is.na(expiry)) NA else as.character(expiry),
-                    if (is.na(location)) NA else location
+                    batch,
+                    if (is.null(expiry) || is.na(expiry)) {
+                        NA
+                    } else {
+                        as.character(expiry)
+                    },
+                    location
                 )
             )
         }

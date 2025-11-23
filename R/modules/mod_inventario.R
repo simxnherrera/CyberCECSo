@@ -57,7 +57,7 @@ mod_inventario_ui <- function(id) {
                     ns("inv_view_mode")
                 ),
                 div(
-                    class = "mt-3",
+                    class = "mt-4",
                     actionButton(
                         ns("btn_register_expiry"),
                         "Registrar vencimiento del lote seleccionado",
@@ -511,9 +511,9 @@ mod_inventario_server <- function(
                             loc_val <- input[[paste0("loc_prod_", pid)]]
 
                             items[[length(items) + 1]] <- list(
-                                product_id = pid,
-                                quantity = qty_val,
-                                expiry_date = if (!is.null(expiry_val)) {
+                                id = pid,
+                                qty = qty_val,
+                                expiry = if (!is.null(expiry_val)) {
                                     as.character(expiry_val)
                                 } else {
                                     NA
@@ -528,7 +528,11 @@ mod_inventario_server <- function(
                     }
 
                     if (length(items) > 0) {
-                        register_purchase_transaction(pool, items)
+                        register_purchase_transaction(
+                            pool,
+                            as.integer(input$buy_provider),
+                            items
+                        )
                         showNotification(
                             "Compra registrada correctamente",
                             type = "message"
@@ -922,24 +926,42 @@ mod_inventario_server <- function(
             tryCatch(
                 {
                     prod_id <- as.integer(input$adj_product)
+
+                    if (length(prod_id) == 0 || is.na(prod_id)) {
+                        showNotification("Producto inválido.", type = "error")
+                        return()
+                    }
                     type <- input$adj_movement_type
+                    if (is.null(type) || length(type) == 0 || is.na(type)) {
+                        type <- "ajuste"
+                    }
                     note <- input$adj_note
 
                     set_absolute <- isTRUE(input$adj_set_absolute)
                     target_qty <- if (set_absolute) {
-                        suppressWarnings(as.numeric(input$adj_target_qty))
+                        val <- suppressWarnings(as.numeric(
+                            input$adj_target_qty
+                        ))
+                        if (length(val) == 0) NA else val
                     } else {
                         NA
                     }
 
-                    specific_batch <- isTRUE(input$show_advanced) &&
-                        !is.null(input$adj_existing_batch) &&
-                        input$adj_existing_batch != "new" &&
-                        !isTRUE(input$adj_use_fefo)
+                    specific_batch <- isTRUE(
+                        isTRUE(input$show_advanced) &&
+                            !is.null(input$adj_existing_batch) &&
+                            length(input$adj_existing_batch) > 0 &&
+                            !is.na(input$adj_existing_batch) &&
+                            input$adj_existing_batch != "new" &&
+                            !isTRUE(input$adj_use_fefo)
+                    )
 
                     use_fefo <- isTRUE(input$adj_use_fefo)
 
                     qty_input <- suppressWarnings(as.numeric(input$adj_qty))
+                    if (length(qty_input) == 0) {
+                        qty_input <- NA
+                    }
 
                     # validaciones básicas
                     if (!set_absolute && (is.na(qty_input) || qty_input < 0)) {
@@ -967,9 +989,6 @@ mod_inventario_server <- function(
                             nrow(match) > 0 && !is.na(match$cantidad_actual[1])
                         ) {
                             base_qty <- match$cantidad_actual[1]
-                            # también capturamos ubicación y vencimiento para el ajuste
-                            current_loc <- match$ubicacion[1]
-                            current_exp <- match$fecha_vencimiento[1]
                         }
                     } else {
                         # stock total consolidado
@@ -1023,7 +1042,12 @@ mod_inventario_server <- function(
                             final_qty,
                             ")"
                         )
-                        note <- if (nzchar(note)) {
+
+                        has_note <- !is.null(note) &&
+                            !is.na(note) &&
+                            length(note) > 0 &&
+                            nzchar(note)
+                        note <- if (has_note) {
                             paste(note, "|", delta_info)
                         } else {
                             delta_info
@@ -1031,7 +1055,14 @@ mod_inventario_server <- function(
                     } else {
                         # modo relativo (sumar/restar)
                         direction <- if (type == "ajuste") {
-                            input$adj_adjust_direction
+                            val <- input$adj_adjust_direction
+                            if (
+                                is.null(val) || length(val) == 0 || is.na(val)
+                            ) {
+                                "add"
+                            } else {
+                                val
+                            }
                         } else {
                             "add"
                         }
@@ -1081,7 +1112,14 @@ mod_inventario_server <- function(
                         ]
 
                         remaining <- abs(final_qty)
-                        base_note <- if (nzchar(note)) note else ""
+
+                        base_note <- if (
+                            !is.null(note) && !is.na(note) && nzchar(note)
+                        ) {
+                            note
+                        } else {
+                            ""
+                        }
 
                         for (i in seq_len(nrow(lots))) {
                             avail <- ifelse(
@@ -1138,8 +1176,15 @@ mod_inventario_server <- function(
 
                         # determinar lote/ubicación/vencimiento
                         batch_val <- NULL
+                        # Safely extract location and expiry (they may be NULL if advanced options are hidden)
                         loc_val <- input$adj_location
+                        if (is.null(loc_val) || length(loc_val) == 0) {
+                            loc_val <- NA
+                        }
                         exp_val <- input$adj_expiry
+                        if (is.null(exp_val) || length(exp_val) == 0) {
+                            exp_val <- NA
+                        }
 
                         if (specific_batch) {
                             # si es lote específico, usamos sus datos (que ya buscamos arriba si era necesario)
@@ -1157,10 +1202,16 @@ mod_inventario_server <- function(
                             }
                         } else if (
                             isTRUE(input$show_advanced) &&
+                                !is.null(input$adj_batch) &&
+                                length(input$adj_batch) > 0 &&
+                                !is.na(input$adj_batch) &&
                                 nzchar(input$adj_batch)
                         ) {
                             # nuevo lote manual
                             batch_val <- input$adj_batch
+                        }
+                        if (length(batch_val) == 0) {
+                            batch_val <- NA
                         }
 
                         register_adjustment(
