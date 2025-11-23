@@ -9,6 +9,7 @@ CREATE TABLE usuarios (
     activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1))
 );
 
+
 -- tabla de proveedores
 CREATE TABLE proveedores (
     id_proveedor INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,17 +31,19 @@ CREATE TABLE productos (
     precio_venta REAL,
     categoria TEXT,
     perecedero INTEGER NOT NULL DEFAULT 0 CHECK(perecedero IN (0, 1)),
+    cantidad_minima REAL NOT NULL DEFAULT 0,
     activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1)),
     FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor)
 );
 
 -- tabla de inventario
-CREATE TABLE inventario (
+CREATE TABLE IF NOT EXISTS inventario (
     id_inventario INTEGER PRIMARY KEY AUTOINCREMENT,
-    id_producto INTEGER NOT NULL UNIQUE,
+    id_producto INTEGER NOT NULL,
     cantidad_actual REAL NOT NULL DEFAULT 0,
-    cantidad_minima REAL NOT NULL DEFAULT 0,
-    ubicacion TEXT CHECK(ubicacion IN ('adelante', 'atras', 'freezer')),
+    ubicacion TEXT,
+    lote TEXT,
+    fecha_vencimiento DATE,
     fecha_ultima_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP,
     actualizado_por TEXT,
     FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
@@ -77,6 +80,9 @@ CREATE TABLE movimientos_stock (
     id_producto INTEGER NOT NULL,
     tipo_movimiento TEXT NOT NULL CHECK(tipo_movimiento IN ('entrada', 'salida', 'ajuste', 'vencimiento')),
     cantidad REAL NOT NULL,
+    lote TEXT,
+    fecha_vencimiento DATE,
+    ubicacion TEXT,
     fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     usuario TEXT,
     nota TEXT,
@@ -100,11 +106,11 @@ CREATE TABLE pagos_proveedores (
     FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido)
 );
 
+
 -- índices para mejorar el rendimiento
 CREATE INDEX idx_productos_proveedor ON productos(id_proveedor);
 CREATE INDEX idx_productos_categoria ON productos(categoria);
 CREATE INDEX idx_inventario_producto ON inventario(id_producto);
-CREATE INDEX idx_movimientos_producto ON movimientos_stock(id_producto);
 CREATE INDEX idx_movimientos_fecha ON movimientos_stock(fecha);
 CREATE INDEX idx_pedidos_proveedor ON pedidos_proveedores(id_proveedor);
 CREATE INDEX idx_pedidos_estado ON pedidos_proveedores(estado);
