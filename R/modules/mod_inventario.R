@@ -57,7 +57,7 @@ mod_inventario_ui <- function(id) {
                     ns("inv_view_mode")
                 ),
                 div(
-                    class = "mt-4",
+                    class = "mt-5",
                     actionButton(
                         ns("btn_register_expiry"),
                         "Registrar vencimiento del lote seleccionado",
@@ -327,7 +327,7 @@ mod_inventario_server <- function(
                         pool = pool,
                         product_id = inv_record$id_producto,
                         type = "vencimiento",
-                        quantity = inv_record$cantidad_actual,
+                        quantity = -inv_record$cantidad_actual,
                         reason = input$expiry_reason,
                         batch = inv_record$lote,
                         location = inv_record$ubicacion,
