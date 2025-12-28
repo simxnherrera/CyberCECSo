@@ -1,7 +1,7 @@
 mod_inventario_ui <- function(id) {
-    ns <- NS(id)
+    ns <- shiny::NS(id)
 
-    tabPanel(
+    shiny::tabPanel(
         "Inventario",
         card(
             card_header(
@@ -24,15 +24,15 @@ mod_inventario_ui <- function(id) {
                 )
             ),
             # controles de vista
-            tabsetPanel(
+            shiny::tabsetPanel(
                 id = ns("inv_view_mode"),
                 type = "tabs",
                 selected = "consolidated",
-                tabPanel(
+                shiny::tabPanel(
                     "Resumen por producto",
                     value = "consolidated"
                 ),
-                tabPanel(
+                shiny::tabPanel(
                     "Detalle por lotes",
                     value = "detailed",
                     selectInput(
@@ -75,20 +75,24 @@ mod_inventario_server <- function(
     pool,
     productos_reactive,
     proveedores_reactive,
-    movimientos_trigger
+    movimientos_trigger,
+    inventario_trigger_external = NULL
 ) {
-    moduleServer(id, function(input, output, session) {
+    shiny::moduleServer(id, function(input, output, session) {
         ns <- session$ns
 
         # lógica de inventario
         # --------------------
 
         # trigger para refrescar inventario
-        inventario_trigger <- reactiveVal(0)
+        inventario_trigger_local <- reactiveVal(0)
 
         # reactive para datos de inventario basados en el modo de vista
         inventario_data <- reactive({
-            inventario_trigger()
+            inventario_trigger_local()
+            if (!is.null(inventario_trigger_external)) {
+                inventario_trigger_external()
+            }
 
             view_mode <- if (is.null(input$inv_view_mode)) {
                 "consolidated"
@@ -339,7 +343,7 @@ mod_inventario_server <- function(
                         type = "message"
                     )
                     removeModal()
-                    inventario_trigger(inventario_trigger() + 1)
+                    inventario_trigger_local(inventario_trigger_local() + 1)
                     movimientos_trigger(movimientos_trigger() + 1)
                 },
                 error = function(e) {
@@ -538,7 +542,7 @@ mod_inventario_server <- function(
                             type = "message"
                         )
                         removeModal()
-                        inventario_trigger(inventario_trigger() + 1)
+                        inventario_trigger_local(inventario_trigger_local() + 1)
                         movimientos_trigger(movimientos_trigger() + 1)
                     } else {
                         showNotification(
@@ -1231,7 +1235,7 @@ mod_inventario_server <- function(
                     }
 
                     removeModal()
-                    inventario_trigger(inventario_trigger() + 1)
+                    inventario_trigger_local(inventario_trigger_local() + 1)
                     movimientos_trigger(movimientos_trigger() + 1)
                 },
                 error = function(e) {

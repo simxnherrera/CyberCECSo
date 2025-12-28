@@ -56,7 +56,7 @@ CREATE TABLE pedidos_proveedores (
     fecha_pedido DATE NOT NULL DEFAULT CURRENT_DATE,
     fecha_entrega_esperada DATE,
     fecha_entrega_real DATE,
-    estado TEXT NOT NULL DEFAULT 'pendiente' CHECK(estado IN ('pendiente', 'recibido', 'cancelado')),
+    estado TEXT NOT NULL DEFAULT 'pendiente' CHECK(estado IN ('pendiente', 'realizado', 'recibido', 'cancelado')),
     monto_total REAL,
     notas TEXT,
     FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor)
@@ -72,6 +72,45 @@ CREATE TABLE detalle_pedidos (
     precio_unitario REAL NOT NULL,
     FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido),
     FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
+);
+
+-- tabla de recepciones de pedidos (una recepción final por pedido)
+CREATE TABLE recepciones_pedidos (
+    id_recepcion INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_pedido INTEGER NOT NULL UNIQUE,
+    fecha_recepcion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notas TEXT,
+    usuario TEXT,
+    FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido)
+);
+
+-- detalle de recepciones (incluye extras)
+CREATE TABLE recepciones_detalle (
+    id_recepcion_detalle INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_recepcion INTEGER NOT NULL,
+    id_pedido INTEGER NOT NULL,
+    id_producto INTEGER NOT NULL,
+    cantidad_recibida REAL NOT NULL DEFAULT 0,
+    tipo TEXT NOT NULL DEFAULT 'pedido' CHECK(tipo IN ('pedido', 'extra')),
+    precio_unitario REAL,
+    lote TEXT,
+    fecha_vencimiento DATE,
+    ubicacion TEXT,
+    usuario TEXT,
+    FOREIGN KEY (id_recepcion) REFERENCES recepciones_pedidos(id_recepcion),
+    FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido),
+    FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
+);
+
+-- log de eventos de pedidos (para futura auditoria de usuarios)
+CREATE TABLE pedidos_eventos (
+    id_evento INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_pedido INTEGER NOT NULL,
+    fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    accion TEXT NOT NULL,
+    detalle TEXT,
+    usuario TEXT,
+    FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido)
 );
 
 -- tabla de movimientos de stock
@@ -115,6 +154,10 @@ CREATE INDEX idx_movimientos_fecha ON movimientos_stock(fecha);
 CREATE INDEX idx_pedidos_proveedor ON pedidos_proveedores(id_proveedor);
 CREATE INDEX idx_pedidos_estado ON pedidos_proveedores(estado);
 CREATE INDEX idx_detalle_pedido ON detalle_pedidos(id_pedido);
+CREATE INDEX idx_recepciones_pedido ON recepciones_pedidos(id_pedido);
+CREATE INDEX idx_recepciones_detalle_pedido ON recepciones_detalle(id_pedido);
+CREATE INDEX idx_recepciones_detalle_producto ON recepciones_detalle(id_producto);
+CREATE INDEX idx_eventos_pedido ON pedidos_eventos(id_pedido);
 CREATE INDEX idx_pagos_proveedor ON pagos_proveedores(id_proveedor);
 
 -- trigger para actualizar la fecha de última actualización en inventario

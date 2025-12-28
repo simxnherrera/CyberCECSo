@@ -17,6 +17,8 @@ ui <- page_fluid(
     # pestaña de inventario
     # pestaña de inventario
     mod_inventario_ui("inventario"),
+    # pestaña de pedidos
+    mod_pedidos_ui("pedidos"),
     # pestaña de proveedores
     # pestaña de proveedores
     mod_proveedores_ui("proveedores"),

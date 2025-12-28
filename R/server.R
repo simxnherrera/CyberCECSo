@@ -11,7 +11,8 @@ server <- function(input, output, session) {
   productos <- mod_productos_server("productos", conn, proveedores)
 
   # lógica de movimientos (trigger)
-  movimientos_trigger <- reactiveVal(0)
+  movimientos_trigger <- shiny::reactiveVal(0)
+  inventario_trigger <- shiny::reactiveVal(0)
 
   # lógica de inventario
   mod_inventario_server(
@@ -19,7 +20,18 @@ server <- function(input, output, session) {
     conn,
     productos,
     proveedores,
-    movimientos_trigger
+    movimientos_trigger,
+    inventario_trigger
+  )
+
+  # lógica de pedidos
+  mod_pedidos_server(
+    "pedidos",
+    conn,
+    proveedores,
+    productos,
+    movimientos_trigger,
+    inventario_trigger
   )
 
   # lógica de movimientos

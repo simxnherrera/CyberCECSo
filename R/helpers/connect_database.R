@@ -15,5 +15,7 @@ connect_database <- function(db_path = DB_PATH, schema_path = SCHEMA_PATH) {
     apply_schema(pool, schema_path)
   }
 
+  ensure_schema_updates(pool)
+
   pool
 }

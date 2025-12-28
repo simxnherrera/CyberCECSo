@@ -7,14 +7,33 @@ register_purchase_transaction <- function(pool, provider_id, items) {
         DBI::dbExecute(
             conn,
             "
-      INSERT INTO pedidos_proveedores (id_proveedor, fecha_pedido, estado)
-      VALUES (?, DATE('now'), 'recibido')
+      INSERT INTO pedidos_proveedores (id_proveedor, fecha_pedido, fecha_entrega_real, estado)
+      VALUES (?, DATE('now'), DATE('now'), 'recibido')
     ",
             params = list(provider_id)
         )
 
         # get the new order ID
         order_id <- DBI::dbGetQuery(conn, "SELECT last_insert_rowid() as id")$id
+
+        # create reception record
+        DBI::dbExecute(
+            conn,
+            "
+      INSERT INTO recepciones_pedidos (id_pedido, notas, usuario)
+      VALUES (?, 'Compra rapida', ?)
+    ",
+            params = list(order_id, NA)
+        )
+        recepcion_id <- DBI::dbGetQuery(conn, "SELECT last_insert_rowid() as id")$id
+
+        insert_pedido_evento(
+            conn,
+            order_id,
+            "compra_rapida",
+            detalle = "Pedido registrado y recibido en compra rapida",
+            usuario = NULL
+        )
 
         # helper to convert number to letters (1=A, 27=AA)
         number_to_letters <- function(n) {
@@ -110,6 +129,37 @@ register_purchase_transaction <- function(pool, provider_id, items) {
           VALUES (?, ?, ?, ?, ?)
         ",
                     params = list(order_id, prod_id, qty, qty, price)
+                )
+
+                # a.1 insert reception detail
+                DBI::dbExecute(
+                    conn,
+                    "
+          INSERT INTO recepciones_detalle (
+            id_recepcion,
+            id_pedido,
+            id_producto,
+            cantidad_recibida,
+            tipo,
+            precio_unitario,
+            lote,
+            fecha_vencimiento,
+            ubicacion,
+            usuario
+          )
+          VALUES (?, ?, ?, ?, 'pedido', ?, ?, ?, ?, ?)
+        ",
+                    params = list(
+                        recepcion_id,
+                        order_id,
+                        prod_id,
+                        qty,
+                        price,
+                        batch,
+                        expiry,
+                        location,
+                        NA
+                    )
                 )
 
                 # b. insert movement
