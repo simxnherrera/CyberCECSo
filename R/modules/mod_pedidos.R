@@ -44,11 +44,7 @@ mod_pedidos_ui <- function(id) {
                         "Nuevo pedido",
                         class = "btn-primary"
                     ),
-                    actionButton(
-                        ns("btn_refresh_pedido"),
-                        "Refrescar",
-                        class = "btn-outline-secondary btn-sm"
-                    )
+                    NULL
                 )
             ),
             uiOutput(ns("kanban_ui"))
@@ -77,6 +73,7 @@ mod_pedidos_server <- function(
         recepcion_proveedor_id <- reactiveVal(NULL)
         extras_list <- reactiveVal(list())
         pending_receipt <- reactiveVal(NULL)
+        pending_status_change <- reactiveVal(NULL)
         kanban_state <- reactiveVal(NULL)
 
         list_ids <- c(
@@ -90,19 +87,39 @@ mod_pedidos_server <- function(
             fetch_pedidos_kanban(pool)
         })
 
-        observeEvent(input$btn_refresh_pedido, {
-            pedidos_trigger(pedidos_trigger() + 1)
-        })
-
         build_provider_label <- function(row) {
-            empresa <- row$proveedor_empresa
+            nombre <- row$proveedor_nombre[1]
+            empresa <- row$proveedor_empresa[1]
             if (!is.null(empresa) &&
                 length(empresa) > 0 &&
-                isTRUE(nzchar(empresa[1]))) {
-                paste0(row$proveedor_nombre, " (", empresa[1], ")")
+                isTRUE(nzchar(empresa))) {
+                paste0(nombre, " (", empresa, ")")
             } else {
-                row$proveedor_nombre
+                nombre
             }
+        }
+
+        normalize_date_input <- function(value) {
+            if (is.null(value) || length(value) == 0 || is.na(value[1])) {
+                return(NA)
+            }
+            value <- as.character(value[1])
+            if (nzchar(value)) {
+                value
+            } else {
+                NA
+            }
+        }
+
+        format_estado_label <- function(estado) {
+            switch(
+                estado,
+                pendiente = "Pendiente",
+                realizado = "Realizado",
+                recibido = "Recibido",
+                cancelado = "Cancelado",
+                estado
+            )
         }
 
         build_pedido_card <- function(row) {
@@ -181,25 +198,28 @@ mod_pedidos_server <- function(
             recibidos <- data[data$estado == "recibido", ]
 
             pendientes_labels <- if (nrow(pendientes) > 0) {
-                lapply(seq_len(nrow(pendientes)), function(i) {
+                labels <- lapply(seq_len(nrow(pendientes)), function(i) {
                     build_pedido_card(pendientes[i, ])
                 })
+                setNames(labels, as.character(pendientes$id_pedido))
             } else {
                 list()
             }
 
             realizados_labels <- if (nrow(realizados) > 0) {
-                lapply(seq_len(nrow(realizados)), function(i) {
+                labels <- lapply(seq_len(nrow(realizados)), function(i) {
                     build_pedido_card(realizados[i, ])
                 })
+                setNames(labels, as.character(realizados$id_pedido))
             } else {
                 list()
             }
 
             recibidos_labels <- if (nrow(recibidos) > 0) {
-                lapply(seq_len(nrow(recibidos)), function(i) {
+                labels <- lapply(seq_len(nrow(recibidos)), function(i) {
                     build_pedido_card(recibidos[i, ])
                 })
+                setNames(labels, as.character(recibidos$id_pedido))
             } else {
                 list()
             }
@@ -208,13 +228,6 @@ mod_pedidos_server <- function(
                 header = NULL,
                 group_name = ns("pedidos_kanban"),
                 orientation = "horizontal",
-                options = sortable::sortable_options(
-                    onSort = sortable::sortable_js_capture_bucket_input(
-                        ns("pedidos_bucket"),
-                        input_ids = list_ids,
-                        css_ids = list_ids
-                    )
-                ),
                 sortable::add_rank_list(
                     text = "Pedidos pendientes",
                     labels = pendientes_labels,
@@ -269,15 +282,77 @@ mod_pedidos_server <- function(
             out <- character(0)
             for (list_id in names(status_map)) {
                 ids <- bucket_state[[list_id]]
-                if (length(ids) > 0) {
+                if (is.null(ids)) {
+                    fallback_key <- names(list_ids)[
+                        unname(list_ids) == list_id
+                    ]
+                    if (length(fallback_key) > 0) {
+                        ids <- bucket_state[[fallback_key[1]]]
+                    }
+                }
+                if (!is.null(ids) && length(ids) > 0) {
+                    ids <- as.character(ids)
                     out[ids] <- status_map[[list_id]]
                 }
             }
             out
         }
 
-        observeEvent(input$pedidos_bucket, {
-            cur <- input$pedidos_bucket
+        open_status_change_modal <- function(pedido_id, old_status, new_status) {
+            row <- pedidos_data()[pedidos_data()$id_pedido == pedido_id, ]
+            if (nrow(row) == 0) {
+                return()
+            }
+
+            selected_pedido_id(pedido_id)
+            selected_pedido_estado(old_status)
+
+            old_label <- format_estado_label(old_status)
+            new_label <- format_estado_label(new_status)
+
+            showModal(modalDialog(
+                title = paste(
+                    "Pedido #",
+                    pedido_id,
+                    "-",
+                    build_provider_label(row)
+                ),
+                div(
+                    class = "mb-3",
+                    span(
+                        class = "badge text-bg-secondary me-2",
+                        paste0("Estado actual: ", old_label)
+                    ),
+                    span(
+                        class = "badge text-bg-primary me-2",
+                        paste0("Nuevo estado: ", new_label)
+                    ),
+                    span(
+                        class = "badge text-bg-info me-2",
+                        paste0("Items: ", row$items_total[1])
+                    )
+                ),
+                DT::DTOutput(ns("pedido_detalle_table")),
+                uiOutput(ns("pedido_extras_ui")),
+                footer = tagList(
+                    actionButton(
+                        ns("confirm_status_change"),
+                        paste0("Confirmar cambio a ", new_label),
+                        class = "btn-primary"
+                    ),
+                    actionButton(
+                        ns("cancel_status_change"),
+                        "Cancelar",
+                        class = "btn-secondary"
+                    )
+                ),
+                size = "l",
+                easyClose = FALSE
+            ))
+        }
+
+        observeEvent(input$pedidos_kanban, {
+            cur <- input$pedidos_kanban
             if (is.null(cur)) {
                 return()
             }
@@ -294,48 +369,102 @@ mod_pedidos_server <- function(
             changed_ids <- all_ids[prev_map[all_ids] != cur_map[all_ids]]
             changed_ids <- changed_ids[!is.na(changed_ids)]
 
-            for (pedido_id in changed_ids) {
-                new_status <- cur_map[[pedido_id]]
-                old_status <- prev_map[[pedido_id]]
+            if (length(changed_ids) == 0) {
+                kanban_state(cur)
+                return()
+            }
 
-                if (is.na(new_status) || is.na(old_status)) {
-                    next
-                }
+            pedido_id <- changed_ids[[1]]
+            new_status <- cur_map[[pedido_id]]
+            old_status <- prev_map[[pedido_id]]
 
-                if (old_status == "recibido" && new_status != "recibido") {
-                    showNotification(
-                        "Los pedidos recibidos no se pueden mover.",
-                        type = "warning"
-                    )
-                    pedidos_trigger(pedidos_trigger() + 1)
-                    next
-                }
+            if (is.na(new_status) || is.na(old_status)) {
+                pedidos_trigger(pedidos_trigger() + 1)
+                return()
+            }
 
-                if (new_status == "recibido") {
-                    pending_receipt(list(
-                        id = as.integer(pedido_id),
-                        prev_status = old_status
-                    ))
-                    open_recepcion_modal(as.integer(pedido_id))
-                } else {
+            if (old_status == "recibido" && new_status != "recibido") {
+                showNotification(
+                    "Los pedidos recibidos no se pueden mover.",
+                    type = "warning"
+                )
+                pedidos_trigger(pedidos_trigger() + 1)
+                return()
+            }
+
+            pending_status_change(NULL)
+            pending_receipt(NULL)
+
+            pedido_id <- suppressWarnings(as.integer(pedido_id))
+            if (is.na(pedido_id)) {
+                showNotification(
+                    "No se pudo identificar el pedido movido.",
+                    type = "error"
+                )
+                pedidos_trigger(pedidos_trigger() + 1)
+                return()
+            }
+
+            if (new_status == "recibido") {
+                pending_receipt(list(
+                    id = pedido_id,
+                    prev_status = old_status
+                ))
+                open_recepcion_modal(pedido_id)
+            } else {
+                pending_status_change(list(
+                    id = pedido_id,
+                    from = old_status,
+                    to = new_status
+                ))
+                open_status_change_modal(pedido_id, old_status, new_status)
+            }
+
+            pedidos_trigger(pedidos_trigger() + 1)
+        })
+
+        observeEvent(input$confirm_status_change, {
+            change <- pending_status_change()
+            if (is.null(change)) {
+                return()
+            }
+
+            tryCatch(
+                {
                     pool::poolWithTransaction(pool, function(conn) {
                         update_pedido_estado(
                             conn,
-                            pedido_id,
-                            new_status,
+                            change$id,
+                            change$to,
                             usuario = current_user(),
                             detalle_evento = paste0(
-                                old_status,
+                                change$from,
                                 " -> ",
-                                new_status
+                                change$to
                             )
                         )
                     })
+                    showNotification(
+                        "Estado actualizado correctamente",
+                        type = "message"
+                    )
+                    selected_pedido_estado(change$to)
+                    pending_status_change(NULL)
+                    removeModal()
                     pedidos_trigger(pedidos_trigger() + 1)
+                },
+                error = function(e) {
+                    showNotification(
+                        paste("Error al actualizar:", e$message),
+                        type = "error"
+                    )
                 }
-            }
+            )
+        })
 
-            kanban_state(cur)
+        observeEvent(input$cancel_status_change, {
+            pending_status_change(NULL)
+            removeModal()
         })
 
         observeEvent(input$pedido_click, {
@@ -540,7 +669,7 @@ mod_pedidos_server <- function(
                 dateInput(
                     ns("pedido_fecha_esperada"),
                     "Fecha de entrega esperada",
-                    value = NA,
+                    value = as.Date(NA),
                     language = "es"
                 ),
                 textAreaInput(
@@ -657,7 +786,7 @@ mod_pedidos_server <- function(
                             pool,
                             as.integer(input$pedido_proveedor),
                             items,
-                            fecha_entrega_esperada = as.character(
+                            fecha_entrega_esperada = normalize_date_input(
                                 input$pedido_fecha_esperada
                             ),
                             notas = input$pedido_notas,
@@ -822,7 +951,7 @@ mod_pedidos_server <- function(
                                             detalle$id_detalle[i]
                                         )),
                                         label = NULL,
-                                        value = NA,
+                                        value = as.Date(NA),
                                         width = "100%",
                                         language = "es"
                                     )
@@ -874,7 +1003,7 @@ mod_pedidos_server <- function(
                 dateInput(
                     ns("extra_expiry"),
                     "Vencimiento extra",
-                    value = NA,
+                    value = as.Date(NA),
                     language = "es"
                 )
             } else {
@@ -902,17 +1031,35 @@ mod_pedidos_server <- function(
                 FALSE
             }
 
+            expiry_val <- NA
+            if (is_perishable) {
+                expiry_val <- normalize_date_input(input$extra_expiry)
+                if (is.na(expiry_val)) {
+                    label_txt <- if (nzchar(label)) {
+                        label
+                    } else {
+                        "producto seleccionado"
+                    }
+                    showNotification(
+                        paste0(
+                            "Falta la fecha de vencimiento para el producto perecedero: ",
+                            label_txt,
+                            "."
+                        ),
+                        type = "error"
+                    )
+                    return()
+                }
+            }
+
             extras <- extras_list()
             extras[[length(extras) + 1]] <- list(
                 id = as.integer(input$extra_product),
                 label = label,
                 qty = qty,
-                expiry = if (is_perishable && !is.null(input$extra_expiry)) {
-                    as.character(input$extra_expiry)
-                } else {
-                    NA
-                },
-                location = input$extra_location
+                expiry = expiry_val,
+                location = input$extra_location,
+                perecedero = is_perishable
             )
             extras_list(extras)
             updateNumericInput(session, "extra_qty", value = 0)
@@ -958,32 +1105,85 @@ mod_pedidos_server <- function(
 
                     for (i in 1:nrow(detalle)) {
                         det_id <- detalle$id_detalle[i]
-                        qty_val <- input[[paste0("rec_qty_", det_id)]]
-                        exp_val <- input[[paste0("rec_exp_", det_id)]]
+                        qty_val <- suppressWarnings(as.numeric(
+                            input[[paste0("rec_qty_", det_id)]]
+                        ))
+                        if (is.na(qty_val)) {
+                            qty_val <- 0
+                        }
+
+                        exp_val <- normalize_date_input(
+                            input[[paste0("rec_exp_", det_id)]]
+                        )
                         loc_val <- input[[paste0("rec_loc_", det_id)]]
+                        if (is.null(loc_val) ||
+                            length(loc_val) == 0 ||
+                            is.na(loc_val) ||
+                            !nzchar(loc_val)) {
+                            loc_val <- NA
+                        }
+
+                        is_perishable <- isTRUE(
+                            as.logical(detalle$perecedero[i])
+                        )
+                        if (is_perishable && qty_val > 0 && is.na(exp_val)) {
+                            showNotification(
+                                paste0(
+                                    "Falta la fecha de vencimiento para el producto perecedero: ",
+                                    detalle$nombre_producto[i],
+                                    "."
+                                ),
+                                type = "error"
+                            )
+                            return()
+                        }
 
                         items[[length(items) + 1]] <- list(
                             id_detalle = det_id,
                             id_producto = detalle$id_producto[i],
-                            qty = if (!is.null(qty_val)) qty_val else 0,
-                            expiry = if (!is.null(exp_val)) {
-                                as.character(exp_val)
-                            } else {
-                                NA
-                            },
-                            location = if (!is.null(loc_val)) {
-                                loc_val
-                            } else {
-                                NA
-                            }
+                            qty = qty_val,
+                            expiry = exp_val,
+                            location = loc_val
                         )
+                    }
+
+                    extras <- extras_list()
+                    if (length(extras) > 0) {
+                        missing_extra <- vapply(
+                            extras,
+                            function(extra) {
+                                isTRUE(extra$perecedero) &&
+                                    (is.null(extra$expiry) ||
+                                        is.na(extra$expiry) ||
+                                        !nzchar(extra$expiry))
+                            },
+                            logical(1)
+                        )
+                        if (any(missing_extra)) {
+                            first_extra <- extras[[which(missing_extra)[1]]]
+                            label_txt <- if (!is.null(first_extra$label) &&
+                                nzchar(first_extra$label)) {
+                                first_extra$label
+                            } else {
+                                "producto extra"
+                            }
+                            showNotification(
+                                paste0(
+                                    "Falta la fecha de vencimiento para el extra: ",
+                                    label_txt,
+                                    "."
+                                ),
+                                type = "error"
+                            )
+                            return()
+                        }
                     }
 
                     register_pedido_recepcion(
                         pool = pool,
                         pedido_id = recepcion_pedido_id(),
                         items = items,
-                        extras = extras_list(),
+                        extras = extras,
                         notas = input$recepcion_notas,
                         usuario = current_user()
                     )

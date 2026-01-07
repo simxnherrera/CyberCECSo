@@ -13,7 +13,7 @@ update_detalle_pedido <- function(
     )$id_pedido
 
     if (!is.null(cantidad_pedida) && !is.na(cantidad_pedida)) {
-        if (cantidad_pedida <= 0) {
+        if (cantidad_pedida < 0) {
             DBI::dbExecute(
                 conn,
                 "DELETE FROM detalle_pedidos WHERE id_detalle = ?",
