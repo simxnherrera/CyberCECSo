@@ -66,9 +66,28 @@ mod_productos_ui <- function(id) {
     )
 }
 
-mod_productos_server <- function(id, pool, proveedores_reactive) {
+mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NULL) {
     moduleServer(id, function(input, output, session) {
         ns <- session$ns
+
+        if (is.null(user_role)) {
+            user_role <- reactiveVal("becarix")
+        }
+
+        is_admin <- reactive({
+            identical(user_role(), "admin")
+        })
+
+        require_admin <- function() {
+            if (!isTRUE(is_admin())) {
+                showNotification(
+                    "No tenes permiso para acceder a este modulo.",
+                    type = "error"
+                )
+                return(FALSE)
+            }
+            TRUE
+        }
 
         # cargar lista inicial de productos
         productos <- reactiveVal(fetch_productos(pool))
@@ -157,6 +176,9 @@ mod_productos_server <- function(id, pool, proveedores_reactive) {
         })
 
         observeEvent(input$btn_edit_prod, {
+            if (!require_admin()) {
+                return()
+            }
             req(input$tabla_productos_rows_selected)
             sel_idx <- input$tabla_productos_rows_selected
             prod_data <- productos()
@@ -204,6 +226,9 @@ mod_productos_server <- function(id, pool, proveedores_reactive) {
         })
 
         observeEvent(input$p_cancel, {
+            if (!require_admin()) {
+                return()
+            }
             updateTextInput(session, "p_nombre", value = "")
             updateSelectInput(session, "p_proveedor", selected = "")
             updateTextInput(session, "p_unidad", value = "")
@@ -218,6 +243,9 @@ mod_productos_server <- function(id, pool, proveedores_reactive) {
 
         # guardar/actualizar producto
         observeEvent(input$p_guardar, {
+            if (!require_admin()) {
+                return()
+            }
             req(input$p_nombre, input$p_unidad)
 
             data <- list(
@@ -268,6 +296,9 @@ mod_productos_server <- function(id, pool, proveedores_reactive) {
 
         # eliminar producto
         observeEvent(input$p_delete, {
+            if (!require_admin()) {
+                return()
+            }
             req(editing_prod_id())
 
             showModal(modalDialog(
@@ -285,6 +316,9 @@ mod_productos_server <- function(id, pool, proveedores_reactive) {
         })
 
         observeEvent(input$confirm_delete_prod, {
+            if (!require_admin()) {
+                return()
+            }
             req(editing_prod_id())
             removeModal()
 

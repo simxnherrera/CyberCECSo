@@ -46,9 +46,28 @@ mod_proveedores_ui <- function(id) {
     )
 }
 
-mod_proveedores_server <- function(id, pool) {
+mod_proveedores_server <- function(id, pool, user_role = NULL) {
     moduleServer(id, function(input, output, session) {
         ns <- session$ns
+
+        if (is.null(user_role)) {
+            user_role <- reactiveVal("becarix")
+        }
+
+        is_admin <- reactive({
+            identical(user_role(), "admin")
+        })
+
+        require_admin <- function() {
+            if (!isTRUE(is_admin())) {
+                showNotification(
+                    "No tenes permiso para acceder a este modulo.",
+                    type = "error"
+                )
+                return(FALSE)
+            }
+            TRUE
+        }
 
         # cargar lista inicial de proveedores
         proveedores <- reactiveVal(fetch_proveedores(pool))
@@ -113,6 +132,9 @@ mod_proveedores_server <- function(id, pool) {
         })
 
         observeEvent(input$btn_edit_prov, {
+            if (!require_admin()) {
+                return()
+            }
             req(input$tabla_proveedores_rows_selected)
             sel_idx <- input$tabla_proveedores_rows_selected
             prov_data <- proveedores()
@@ -133,6 +155,9 @@ mod_proveedores_server <- function(id, pool) {
         })
 
         observeEvent(input$pr_cancel, {
+            if (!require_admin()) {
+                return()
+            }
             updateTextInput(session, "pr_nombre", value = "")
             updateTextInput(session, "pr_empresa", value = "")
             updateTextInput(session, "pr_telefono", value = "")
@@ -144,6 +169,9 @@ mod_proveedores_server <- function(id, pool) {
 
         # guardar/actualizar proveedor
         observeEvent(input$pr_guardar, {
+            if (!require_admin()) {
+                return()
+            }
             req(input$pr_nombre)
 
             data <- list(
@@ -176,6 +204,9 @@ mod_proveedores_server <- function(id, pool) {
 
         # eliminar proveedor
         observeEvent(input$pr_delete, {
+            if (!require_admin()) {
+                return()
+            }
             req(editing_prov_id())
 
             showModal(modalDialog(
@@ -193,6 +224,9 @@ mod_proveedores_server <- function(id, pool) {
         })
 
         observeEvent(input$confirm_delete, {
+            if (!require_admin()) {
+                return()
+            }
             req(editing_prov_id())
             removeModal()
 

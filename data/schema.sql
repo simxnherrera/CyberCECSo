@@ -4,8 +4,10 @@
 -- tabla de usuarios
 CREATE TABLE usuarios (
     id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
-    nombre TEXT NOT NULL,
-    rol TEXT NOT NULL CHECK(rol IN ('becaria', 'coordinadora', 'admin')),
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    nombre TEXT,
+    rol TEXT NOT NULL CHECK(rol IN ('becarix', 'admin')),
     activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1))
 );
 

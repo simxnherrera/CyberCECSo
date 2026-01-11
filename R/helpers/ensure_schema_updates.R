@@ -107,6 +107,8 @@ ensure_schema_updates <- function(conn) {
             migrate_pedidos_estado(conn)
         }
     }
+
+    ensure_usuarios_schema(conn)
 }
 
 migrate_pedidos_estado <- function(conn) {
@@ -172,5 +174,75 @@ migrate_pedidos_estado <- function(conn) {
     DBI::dbExecute(
         conn,
         "CREATE INDEX IF NOT EXISTS idx_pedidos_estado ON pedidos_proveedores(estado)"
+    )
+}
+
+ensure_usuarios_schema <- function(conn) {
+    if (!DBI::dbExistsTable(conn, "usuarios")) {
+        DBI::dbExecute(
+            conn,
+            "
+            CREATE TABLE usuarios (
+                id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                nombre TEXT,
+                rol TEXT NOT NULL CHECK(rol IN ('becarix', 'admin')),
+                activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1))
+            )
+            "
+        )
+        return()
+    }
+
+    cols <- DBI::dbGetQuery(conn, "PRAGMA table_info(usuarios)")$name
+    required <- c(
+        "id_usuario",
+        "username",
+        "password_hash",
+        "nombre",
+        "rol",
+        "activo"
+    )
+    has_columns <- all(required %in% cols)
+
+    sql <- DBI::dbGetQuery(
+        conn,
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='usuarios'"
+    )$sql
+    has_roles <- length(sql) == 1 &&
+        grepl("becarix", sql, fixed = TRUE) &&
+        grepl("admin", sql, fixed = TRUE)
+
+    if (has_columns && has_roles) {
+        return()
+    }
+
+    total <- DBI::dbGetQuery(
+        conn,
+        "SELECT COUNT(*) AS total FROM usuarios"
+    )$total
+    total <- if (length(total) == 0 || is.na(total[1])) 0 else total[1]
+
+    if (total > 0) {
+        stop(
+            "La tabla usuarios tiene un esquema antiguo con datos. ",
+            "Migra manualmente antes de continuar."
+        )
+    }
+
+    DBI::dbExecute(conn, "DROP TABLE usuarios")
+    DBI::dbExecute(
+        conn,
+        "
+        CREATE TABLE usuarios (
+            id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            nombre TEXT,
+            rol TEXT NOT NULL CHECK(rol IN ('becarix', 'admin')),
+            activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1))
+        )
+        "
     )
 }

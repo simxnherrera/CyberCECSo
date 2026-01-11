@@ -26,12 +26,31 @@ mod_pagos_ui <- function(id) {
     )
 }
 
-mod_pagos_server <- function(id, pool) {
+mod_pagos_server <- function(id, pool, current_user = NULL, user_role = NULL) {
     moduleServer(id, function(input, output, session) {
         ns <- session$ns
 
-        # placeholder para futura logica de usuarios
-        current_user <- reactiveVal(NULL)
+        if (is.null(current_user)) {
+            current_user <- reactiveVal(NULL)
+        }
+        if (is.null(user_role)) {
+            user_role <- reactiveVal("becarix")
+        }
+
+        is_admin <- reactive({
+            identical(user_role(), "admin")
+        })
+
+        require_admin <- function() {
+            if (!isTRUE(is_admin())) {
+                showNotification(
+                    "No tenes permiso para acceder a este modulo.",
+                    type = "error"
+                )
+                return(FALSE)
+            }
+            TRUE
+        }
 
         pedidos_trigger <- reactiveVal(0)
         pagos_trigger <- reactiveVal(0)
@@ -97,11 +116,13 @@ mod_pagos_server <- function(id, pool) {
         }
 
         pedidos_data <- reactive({
+            req(is_admin())
             pedidos_trigger()
             fetch_pedidos_kanban(pool)
         })
 
         observe({
+            req(is_admin())
             data <- pedidos_data()
             if (nrow(data) == 0) {
                 updateSelectInput(
@@ -130,6 +151,9 @@ mod_pagos_server <- function(id, pool) {
         })
 
         observeEvent(input$btn_refresh_pedidos, {
+            if (!require_admin()) {
+                return()
+            }
             pedidos_trigger(pedidos_trigger() + 1)
         })
 
@@ -143,6 +167,7 @@ mod_pagos_server <- function(id, pool) {
 
         selected_pedido_row <- reactive({
             req(selected_pedido_id())
+            req(is_admin())
             data <- pedidos_data()
             row <- data[data$id_pedido == selected_pedido_id(), ]
             if (nrow(row) == 0) {
@@ -153,6 +178,7 @@ mod_pagos_server <- function(id, pool) {
 
         pagos_data <- reactive({
             req(selected_pedido_id())
+            req(is_admin())
             pagos_trigger()
             fetch_pagos_pedido(pool, selected_pedido_id())
         })
@@ -163,6 +189,7 @@ mod_pagos_server <- function(id, pool) {
         }
 
         output$pagos_content <- renderUI({
+            req(is_admin())
             row <- selected_pedido_row()
             if (is.null(row) || nrow(row) == 0) {
                 return(div(class = "text-muted", "Selecciona un pedido."))
@@ -244,6 +271,7 @@ mod_pagos_server <- function(id, pool) {
 
         output$pagos_table <- DT::renderDT({
             req(selected_pedido_id())
+            req(is_admin())
             pagos <- pagos_data()
 
             data <- pagos |>
@@ -294,6 +322,9 @@ mod_pagos_server <- function(id, pool) {
         })
 
         observeEvent(input$btn_update_monto, {
+            if (!require_admin()) {
+                return()
+            }
             req(selected_pedido_id())
             new_monto <- suppressWarnings(as.numeric(input$pedido_monto_input))
 
@@ -390,11 +421,17 @@ mod_pagos_server <- function(id, pool) {
         }
 
         observeEvent(input$btn_new_pago, {
+            if (!require_admin()) {
+                return()
+            }
             req(selected_pedido_id())
             open_pago_modal()
         })
 
         observeEvent(input$btn_edit_pago, {
+            if (!require_admin()) {
+                return()
+            }
             req(selected_pedido_id())
             req(input$pagos_table_rows_selected)
 
@@ -408,6 +445,9 @@ mod_pagos_server <- function(id, pool) {
         })
 
         observeEvent(input$confirm_pago, {
+            if (!require_admin()) {
+                return()
+            }
             req(selected_pedido_id())
             monto_val <- suppressWarnings(as.numeric(input$pago_monto))
             if (is.na(monto_val) || monto_val <= 0) {
@@ -481,6 +521,9 @@ mod_pagos_server <- function(id, pool) {
         })
 
         observeEvent(input$btn_delete_pago, {
+            if (!require_admin()) {
+                return()
+            }
             req(selected_pedido_id())
             req(input$pagos_table_rows_selected)
 
@@ -508,6 +551,9 @@ mod_pagos_server <- function(id, pool) {
         })
 
         observeEvent(input$confirm_delete_pago, {
+            if (!require_admin()) {
+                return()
+            }
             req(pending_delete_pago_id())
             tryCatch(
                 {

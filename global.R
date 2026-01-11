@@ -9,15 +9,24 @@ library(sortable)
 
 sortable::enable_modules()
 
-# ruta por defecto a la base y al schema
-DB_PATH <- "data/cybercecso.sqlite"
-SCHEMA_PATH <- "data/schema.sql"
+# ruta por defecto a la base y al schema (anclada al directorio del proyecto)
+app_root <- tryCatch(
+    dirname(normalizePath(sys.frame(1)$ofile)),
+    error = function(e) NULL
+)
+if (is.null(app_root) || !nzchar(app_root)) {
+    app_root <- getwd()
+}
+
+DB_PATH <- file.path(app_root, "data", "cybercecso.sqlite")
+SCHEMA_PATH <- file.path(app_root, "data", "schema.sql")
 
 # base de datos
 source("R/helpers/parse_statements.R")
 source("R/helpers/apply_schema.R")
 source("R/helpers/ensure_schema_updates.R")
 source("R/helpers/normalize_scalar.R")
+source("R/helpers/check_credentials_db.R")
 source("R/helpers/connect_database.R")
 
 # traer tablas
@@ -36,6 +45,7 @@ source("R/helpers/insert_producto.R")
 source("R/helpers/insert_pedido.R")
 source("R/helpers/insert_pedido_evento.R")
 source("R/helpers/insert_pago_proveedor.R")
+source("R/helpers/insert_usuario.R")
 
 # actualizar operaciones
 source("R/helpers/update_proveedor.R")

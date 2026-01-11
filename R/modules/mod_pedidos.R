@@ -1,4 +1,4 @@
-mod_pedidos_ui <- function(id) {
+mod_pedidos_ui <- function(id, can_create_pedido = TRUE) {
     ns <- NS(id)
 
     tabPanel(
@@ -39,12 +39,13 @@ mod_pedidos_ui <- function(id) {
                 "Pedidos a proveedores",
                 div(
                     class = "d-flex gap-2",
-                    actionButton(
-                        ns("btn_new_pedido"),
-                        "Nuevo pedido",
-                        class = "btn-primary"
-                    ),
-                    NULL
+                    if (isTRUE(can_create_pedido)) {
+                        actionButton(
+                            ns("btn_new_pedido"),
+                            "Nuevo pedido",
+                            class = "btn-primary"
+                        )
+                    }
                 )
             ),
             uiOutput(ns("kanban_ui"))
@@ -58,13 +59,34 @@ mod_pedidos_server <- function(
     proveedores_reactive,
     productos_reactive,
     movimientos_trigger,
-    inventario_trigger
+    inventario_trigger,
+    current_user = NULL,
+    user_role = NULL
 ) {
     moduleServer(id, function(input, output, session) {
         ns <- session$ns
 
-        # placeholder para futura logica de usuarios
-        current_user <- reactiveVal(NULL)
+        if (is.null(current_user)) {
+            current_user <- reactiveVal(NULL)
+        }
+        if (is.null(user_role)) {
+            user_role <- reactiveVal("becarix")
+        }
+
+        can_create_pedido <- reactive({
+            identical(user_role(), "admin")
+        })
+
+        ensure_can_create <- function() {
+            if (!isTRUE(can_create_pedido())) {
+                showNotification(
+                    "No tenes permiso para crear pedidos.",
+                    type = "error"
+                )
+                return(FALSE)
+            }
+            TRUE
+        }
 
         pedidos_trigger <- reactiveVal(0)
         selected_pedido_id <- reactiveVal(NULL)
@@ -689,6 +711,10 @@ mod_pedidos_server <- function(
         })
 
         observeEvent(input$btn_new_pedido, {
+            if (!ensure_can_create()) {
+                return()
+            }
+
             prov <- proveedores_reactive()
             choices_list <- if (nrow(prov)) {
                 labels <- paste0(prov$nombre, " (", prov$empresa, ")")
@@ -788,6 +814,10 @@ mod_pedidos_server <- function(
         })
 
         observeEvent(input$confirm_pedido, {
+            if (!ensure_can_create()) {
+                return()
+            }
+
             req(input$pedido_proveedor)
 
             tryCatch(

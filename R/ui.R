@@ -1,8 +1,31 @@
 library(shiny)
 library(bslib)
 
+build_main_tabs <- function(role) {
+  is_admin <- identical(role, "admin")
+
+  tabs <- list(
+    mod_inventario_ui("inventario"),
+    mod_pedidos_ui("pedidos", can_create_pedido = is_admin)
+  )
+
+  if (is_admin) {
+    tabs <- c(
+      tabs,
+      list(
+        mod_pagos_ui("pagos"),
+        mod_proveedores_ui("proveedores"),
+        mod_productos_ui("productos"),
+        mod_movimientos_ui("movimientos")
+      )
+    )
+  }
+
+  do.call(tabsetPanel, c(list(id = "main_tabs"), tabs))
+}
+
 # ui
-ui <- page_fluid(
+app_ui <- page_fluid(
   theme = bs_theme(version = 5, bootswatch = "zephyr"),
   tags$style(HTML(
     "
@@ -11,22 +34,7 @@ ui <- page_fluid(
     }
   "
   )),
-
-  # panel de pestañas principal
-  tabsetPanel(
-    # pestaña de inventario
-    # pestaña de inventario
-    mod_inventario_ui("inventario"),
-    # pestaña de pedidos
-    mod_pedidos_ui("pedidos"),
-    # pestaña de pagos
-    mod_pagos_ui("pagos"),
-    # pestaña de proveedores
-    # pestaña de proveedores
-    mod_proveedores_ui("proveedores"),
-    # pestaña de productos
-    mod_productos_ui("productos"),
-    # pestaña de movimientos
-    mod_movimientos_ui("movimientos")
-  )
+  uiOutput("main_tabs")
 )
+
+ui <- shinymanager::secure_app(app_ui)
