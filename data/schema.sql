@@ -159,6 +159,7 @@ CREATE INDEX idx_recepciones_detalle_pedido ON recepciones_detalle(id_pedido);
 CREATE INDEX idx_recepciones_detalle_producto ON recepciones_detalle(id_producto);
 CREATE INDEX idx_eventos_pedido ON pedidos_eventos(id_pedido);
 CREATE INDEX idx_pagos_proveedor ON pagos_proveedores(id_proveedor);
+CREATE INDEX idx_pagos_pedido ON pagos_proveedores(id_pedido);
 
 -- trigger para actualizar la fecha de última actualización en inventario
 CREATE TRIGGER actualizar_fecha_inventario

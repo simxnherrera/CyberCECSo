@@ -87,6 +87,7 @@ mod_pedidos_server <- function(
             fetch_pedidos_kanban(pool)
         })
 
+
         build_provider_label <- function(row) {
             nombre <- row$proveedor_nombre[1]
             empresa <- row$proveedor_empresa[1]
@@ -122,6 +123,34 @@ mod_pedidos_server <- function(
             )
         }
 
+        calc_pago_status <- function(monto_pedido, monto_pagado) {
+            monto_pedido <- suppressWarnings(as.numeric(monto_pedido))
+            monto_pagado <- suppressWarnings(as.numeric(monto_pagado))
+
+            if (is.na(monto_pedido) || monto_pedido <= 0) {
+                return(list(
+                    label = "Sin monto",
+                    class = "text-bg-light",
+                    saldo = NA
+                ))
+            }
+
+            if (is.na(monto_pagado)) {
+                monto_pagado <- 0
+            }
+
+            diff <- monto_pedido - monto_pagado
+            if (abs(diff) < 0.01) {
+                list(label = "Pagado", class = "text-bg-success", saldo = 0)
+            } else if (diff > 0 && monto_pagado > 0) {
+                list(label = "Parcial", class = "text-bg-warning", saldo = diff)
+            } else if (diff > 0) {
+                list(label = "Pendiente", class = "text-bg-secondary", saldo = diff)
+            } else {
+                list(label = "Sobrepago", class = "text-bg-danger", saldo = diff)
+            }
+        }
+
         build_pedido_card <- function(row) {
             recibido_txt <- paste0(
                 as.numeric(row$cantidad_recibida_total),
@@ -148,6 +177,11 @@ mod_pedidos_server <- function(
                 "Sin fecha"
             }
 
+            pago_info <- calc_pago_status(
+                row$monto_pedido,
+                row$monto_pagado
+            )
+
             tags$div(
                 class = "pedido-card",
                 `data-rank-id` = row$id_pedido,
@@ -173,7 +207,11 @@ mod_pedidos_server <- function(
                     ),
                     if (!is.null(extras_txt)) {
                         span(class = "badge text-bg-warning", extras_txt)
-                    }
+                    },
+                    span(
+                        class = paste("badge", pago_info$class),
+                        paste0("Pago: ", pago_info$label)
+                    )
                 )
             )
         }

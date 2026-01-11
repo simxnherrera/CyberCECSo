@@ -81,6 +81,7 @@ register_purchase_transaction <- function(pool, provider_id, items) {
         }
 
         # 3. process items
+        total_amount <- 0
         for (item in items) {
             qty <- as.numeric(item$qty)
             prod_id <- as.integer(item$id)
@@ -120,6 +121,7 @@ register_purchase_transaction <- function(pool, provider_id, items) {
                 if (is.na(price)) {
                     price <- 0
                 }
+                total_amount <- total_amount + (qty * price)
 
                 # a. insert detail
                 DBI::dbExecute(
@@ -222,5 +224,15 @@ register_purchase_transaction <- function(pool, provider_id, items) {
                 }
             }
         }
+
+        DBI::dbExecute(
+            conn,
+            "
+            UPDATE pedidos_proveedores
+            SET monto_total = ?
+            WHERE id_pedido = ?
+            ",
+            params = list(total_amount, order_id)
+        )
     })
 }

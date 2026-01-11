@@ -51,6 +51,25 @@ ensure_schema_updates <- function(conn) {
     "
     )
 
+    DBI::dbExecute(
+        conn,
+        "
+        CREATE TABLE IF NOT EXISTS pagos_proveedores (
+            id_pago INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_proveedor INTEGER NOT NULL,
+            id_pedido INTEGER,
+            fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
+            monto REAL NOT NULL,
+            metodo_pago TEXT,
+            factura_numero TEXT,
+            monto_facturado REAL,
+            observaciones TEXT,
+            FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor),
+            FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido)
+        )
+    "
+    )
+
     # indices nuevos
     DBI::dbExecute(
         conn,
@@ -67,6 +86,14 @@ ensure_schema_updates <- function(conn) {
     DBI::dbExecute(
         conn,
         "CREATE INDEX IF NOT EXISTS idx_eventos_pedido ON pedidos_eventos(id_pedido)"
+    )
+    DBI::dbExecute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_pagos_proveedor ON pagos_proveedores(id_proveedor)"
+    )
+    DBI::dbExecute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_pagos_pedido ON pagos_proveedores(id_pedido)"
     )
 
     # migracion de estado para incluir 'realizado'

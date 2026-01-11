@@ -34,6 +34,9 @@ server <- function(input, output, session) {
     inventario_trigger
   )
 
+  # lógica de pagos
+  mod_pagos_server("pagos", conn)
+
   # lógica de movimientos
   mod_movimientos_server("movimientos", conn, productos, movimientos_trigger)
 }

@@ -7,36 +7,8 @@ insert_pedido <- function(
     usuario = NULL
 ) {
     pool::poolWithTransaction(pool, function(conn) {
-        DBI::dbExecute(
-            conn,
-            "
-            INSERT INTO pedidos_proveedores (
-                id_proveedor,
-                fecha_pedido,
-                fecha_entrega_esperada,
-                estado,
-                notas
-            )
-            VALUES (?, DATE('now'), ?, 'pendiente', ?)
-            ",
-            params = list(
-                as.integer(provider_id),
-                if (!is.null(fecha_entrega_esperada) &&
-                    length(fecha_entrega_esperada) > 0 &&
-                    !is.na(fecha_entrega_esperada[1]) &&
-                    nzchar(fecha_entrega_esperada[1])) {
-                    fecha_entrega_esperada[1]
-                } else {
-                    NA
-                },
-                notas
-            )
-        )
-
-        pedido_id <- DBI::dbGetQuery(
-            conn,
-            "SELECT last_insert_rowid() AS id"
-        )$id
+        total_amount <- 0
+        price_map <- list()
 
         if (length(items) > 0) {
             prod_ids <- vapply(
@@ -64,6 +36,54 @@ insert_pedido <- function(
                 as.character(price_data$id_producto)
             )
 
+            for (item in items) {
+                qty <- as.numeric(item$qty)
+                prod_id <- as.integer(item$id)
+
+                if (!is.na(qty) && qty > 0) {
+                    price <- price_map[[as.character(prod_id)]]
+                    if (is.null(price) || is.na(price)) {
+                        price <- 0
+                    }
+                    total_amount <- total_amount + (qty * price)
+                }
+            }
+        }
+
+        DBI::dbExecute(
+            conn,
+            "
+            INSERT INTO pedidos_proveedores (
+                id_proveedor,
+                fecha_pedido,
+                fecha_entrega_esperada,
+                estado,
+                monto_total,
+                notas
+            )
+            VALUES (?, DATE('now'), ?, 'pendiente', ?, ?)
+            ",
+            params = list(
+                as.integer(provider_id),
+                if (!is.null(fecha_entrega_esperada) &&
+                    length(fecha_entrega_esperada) > 0 &&
+                    !is.na(fecha_entrega_esperada[1]) &&
+                    nzchar(fecha_entrega_esperada[1])) {
+                    fecha_entrega_esperada[1]
+                } else {
+                    NA
+                },
+                total_amount,
+                notas
+            )
+        )
+
+        pedido_id <- DBI::dbGetQuery(
+            conn,
+            "SELECT last_insert_rowid() AS id"
+        )$id
+
+        if (length(items) > 0) {
             for (item in items) {
                 qty <- as.numeric(item$qty)
                 prod_id <- as.integer(item$id)
