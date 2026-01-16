@@ -41,17 +41,8 @@ mod_movimientos_server <- function(
     moduleServer(id, function(input, output, session) {
         ns <- session$ns
 
-        if (is.null(user_role)) {
-            user_role <- reactiveVal("becarix")
-        }
-
-        is_admin <- reactive({
-            identical(user_role(), "admin")
-        })
-
         # actualizar opciones de productos en la pestaña de movimientos
         observe({
-            req(is_admin())
             prods <- productos_reactive()
             if (nrow(prods) > 0) {
                 choices <- setNames(prods$id_producto, prods$nombre_producto)
@@ -64,7 +55,6 @@ mod_movimientos_server <- function(
         })
 
         movimientos_data <- reactive({
-            req(is_admin())
             trigger_reactive() # depende del trigger externo
 
             fetch_movimientos(
@@ -77,7 +67,6 @@ mod_movimientos_server <- function(
         })
 
         output$tabla_movimientos <- DT::renderDT({
-            req(is_admin())
             data <- movimientos_data() |>
                 select(
                     fecha,
