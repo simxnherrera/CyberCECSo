@@ -9,7 +9,12 @@ check_credentials_db <- function(conn) {
 
         if (is.na(user) || !nzchar(user) ||
             is.na(password) || !nzchar(password)) {
-            return(NULL)
+            return(list(
+                result = FALSE,
+                expired = FALSE,
+                authorized = FALSE,
+                user_info = NULL
+            ))
         }
 
         row <- DBI::dbGetQuery(
@@ -22,26 +27,53 @@ check_credentials_db <- function(conn) {
         )
 
         if (nrow(row) != 1) {
-            return(NULL)
+            return(list(
+                result = FALSE,
+                expired = FALSE,
+                authorized = FALSE,
+                user_info = NULL
+            ))
         }
+
+        user_info <- data.frame(
+            user = row$username[1],
+            role = row$rol[1],
+            stringsAsFactors = FALSE
+        )
+
         if (!isTRUE(as.logical(row$activo[1]))) {
-            return(NULL)
+            return(list(
+                result = FALSE,
+                expired = FALSE,
+                authorized = FALSE,
+                user_info = user_info
+            ))
         }
 
         hash <- row$password_hash[1]
         if (is.na(hash) || !nzchar(hash)) {
-            return(NULL)
+            return(list(
+                result = FALSE,
+                expired = FALSE,
+                authorized = FALSE,
+                user_info = user_info
+            ))
         }
 
         if (!isTRUE(sodium::password_verify(hash, password))) {
-            return(NULL)
+            return(list(
+                result = FALSE,
+                expired = FALSE,
+                authorized = TRUE,
+                user_info = user_info
+            ))
         }
 
-        data.frame(
-            user = row$username[1],
-            password = password,
-            role = row$rol[1],
-            stringsAsFactors = FALSE
+        list(
+            result = TRUE,
+            expired = FALSE,
+            authorized = TRUE,
+            user_info = user_info
         )
     }
 }
