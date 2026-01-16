@@ -1,8 +1,14 @@
-register_purchase_transaction <- function(pool, provider_id, items) {
+register_purchase_transaction <- function(
+    pool,
+    provider_id,
+    items,
+    usuario = NULL
+) {
     # items is a list of lists, each containing:
     # list(id = 1, qty = 10, expiry = "2023-01-01", location = "adelante")
 
     pool::poolWithTransaction(pool, function(conn) {
+        usuario <- normalize_scalar(usuario)
         # 1. create order
         DBI::dbExecute(
             conn,
@@ -23,7 +29,7 @@ register_purchase_transaction <- function(pool, provider_id, items) {
       INSERT INTO recepciones_pedidos (id_pedido, notas, usuario)
       VALUES (?, 'Compra rapida', ?)
     ",
-            params = list(order_id, NA)
+            params = list(order_id, usuario)
         )
         recepcion_id <- DBI::dbGetQuery(conn, "SELECT last_insert_rowid() as id")$id
 
@@ -32,7 +38,7 @@ register_purchase_transaction <- function(pool, provider_id, items) {
             order_id,
             "compra_rapida",
             detalle = "Pedido registrado y recibido en compra rapida",
-            usuario = NULL
+            usuario = usuario
         )
 
         # helper to convert number to letters (1=A, 27=AA)
@@ -94,6 +100,8 @@ register_purchase_transaction <- function(pool, provider_id, items) {
             } else {
                 NA
             }
+
+            validate_expiry_not_past(expiry, qty)
             location <- if (
                 !is.null(item$location) &&
                     !is.na(item$location) &&
@@ -160,7 +168,7 @@ register_purchase_transaction <- function(pool, provider_id, items) {
                         batch,
                         expiry,
                         location,
-                        NA
+                        usuario
                     )
                 )
 
@@ -168,8 +176,17 @@ register_purchase_transaction <- function(pool, provider_id, items) {
                 DBI::dbExecute(
                     conn,
                     "
-          INSERT INTO movimientos_stock (id_producto, tipo_movimiento, cantidad, id_pedido, lote, fecha_vencimiento, ubicacion)
-          VALUES (?, 'entrada', ?, ?, ?, ?, ?)
+          INSERT INTO movimientos_stock (
+            id_producto,
+            tipo_movimiento,
+            cantidad,
+            id_pedido,
+            lote,
+            fecha_vencimiento,
+            ubicacion,
+            usuario
+          )
+          VALUES (?, 'entrada', ?, ?, ?, ?, ?, ?)
         ",
                     params = list(
                         prod_id,
@@ -177,7 +194,8 @@ register_purchase_transaction <- function(pool, provider_id, items) {
                         order_id,
                         batch,
                         expiry,
-                        location
+                        location,
+                        usuario
                     )
                 )
 

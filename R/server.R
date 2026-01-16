@@ -18,6 +18,18 @@ server <- function(input, output, session) {
     build_main_tabs(current_role())
   })
 
+  observeEvent(input$open_users, {
+    req(current_role())
+    if (!identical(current_role(), "admin")) {
+      showNotification(
+        "No tenes permiso para acceder a este modulo.",
+        type = "error"
+      )
+      return()
+    }
+    updateTabsetPanel(session, "main_tabs", selected = "usuarios")
+  })
+
   # lógica de proveedores
   # ---------------------
   proveedores <- mod_proveedores_server(
@@ -46,7 +58,8 @@ server <- function(input, output, session) {
     productos,
     proveedores,
     movimientos_trigger,
-    inventario_trigger
+    inventario_trigger,
+    current_user = current_user
   )
 
   # lógica de pedidos
@@ -64,6 +77,14 @@ server <- function(input, output, session) {
   # lógica de pagos
   mod_pagos_server(
     "pagos",
+    conn,
+    current_user = current_user,
+    user_role = current_role
+  )
+
+  # lógica de usuarios
+  mod_usuarios_server(
+    "usuarios",
     conn,
     current_user = current_user,
     user_role = current_role

@@ -76,10 +76,15 @@ mod_inventario_server <- function(
     productos_reactive,
     proveedores_reactive,
     movimientos_trigger,
-    inventario_trigger_external = NULL
+    inventario_trigger_external = NULL,
+    current_user = NULL
 ) {
     shiny::moduleServer(id, function(input, output, session) {
         ns <- session$ns
+
+        if (is.null(current_user)) {
+            current_user <- reactiveVal(NULL)
+        }
 
         # lógica de inventario
         # --------------------
@@ -335,7 +340,8 @@ mod_inventario_server <- function(
                         reason = input$expiry_reason,
                         batch = inv_record$lote,
                         location = inv_record$ubicacion,
-                        expiry = inv_record$fecha_vencimiento
+                        expiry = inv_record$fecha_vencimiento,
+                        usuario = current_user()
                     )
 
                     showNotification(
@@ -535,7 +541,8 @@ mod_inventario_server <- function(
                         register_purchase_transaction(
                             pool,
                             as.integer(input$buy_provider),
-                            items
+                            items,
+                            usuario = current_user()
                         )
                         showNotification(
                             "Compra registrada correctamente",
@@ -1154,7 +1161,8 @@ mod_inventario_server <- function(
                                 reason = lot_note,
                                 batch = lots$lote[i],
                                 location = lots$ubicacion[i],
-                                expiry = lots$fecha_vencimiento[i]
+                                expiry = lots$fecha_vencimiento[i],
+                                usuario = current_user()
                             )
 
                             remaining <- remaining - take
@@ -1226,7 +1234,8 @@ mod_inventario_server <- function(
                             reason = note,
                             batch = batch_val,
                             location = loc_val,
-                            expiry = exp_val
+                            expiry = exp_val,
+                            usuario = current_user()
                         )
                         showNotification(
                             "Ajuste registrado correctamente",

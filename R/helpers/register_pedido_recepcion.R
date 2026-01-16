@@ -168,6 +168,8 @@ register_pedido_recepcion <- function(
             } else {
                 NA
             }
+
+            validate_expiry_not_past(expiry, qty)
             location <- if (
                 !is.null(item$location) &&
                     !is.na(item$location) &&
@@ -310,6 +312,8 @@ register_pedido_recepcion <- function(
                 } else {
                     NA
                 }
+
+                validate_expiry_not_past(expiry, qty)
                 location <- if (
                     !is.null(extra$location) &&
                         !is.na(extra$location) &&

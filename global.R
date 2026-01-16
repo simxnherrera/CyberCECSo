@@ -26,6 +26,7 @@ source("R/helpers/parse_statements.R")
 source("R/helpers/apply_schema.R")
 source("R/helpers/ensure_schema_updates.R")
 source("R/helpers/normalize_scalar.R")
+source("R/helpers/validate_expiry_not_past.R")
 source("R/helpers/check_credentials_db.R")
 source("R/helpers/connect_database.R")
 
@@ -38,6 +39,7 @@ source("R/helpers/fetch_pedidos_kanban.R")
 source("R/helpers/fetch_pedido_detalle.R")
 source("R/helpers/fetch_pedido_extras.R")
 source("R/helpers/fetch_pagos_pedido.R")
+source("R/helpers/fetch_usuarios.R")
 
 # insertar operaciones
 source("R/helpers/insert_proveedor.R")
@@ -59,6 +61,7 @@ source("R/helpers/update_pago_proveedor.R")
 source("R/helpers/delete_proveedor.R")
 source("R/helpers/delete_producto.R")
 source("R/helpers/delete_pago_proveedor.R")
+source("R/helpers/delete_usuario.R")
 
 # logica de compras
 source("R/helpers/register_purchase_transaction.R")
@@ -72,6 +75,7 @@ source("R/modules/mod_movimientos.R")
 source("R/modules/mod_inventario.R")
 source("R/modules/mod_pedidos.R")
 source("R/modules/mod_pagos.R")
+source("R/modules/mod_usuarios.R")
 
 # crear el pool de la base de datos
 pool <- connect_database()

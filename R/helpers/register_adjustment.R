@@ -6,17 +6,29 @@ register_adjustment <- function(
     reason,
     batch = NA,
     location = NA,
-    expiry = NA
+    expiry = NA,
+    usuario = NULL
 ) {
     pool::poolWithTransaction(pool, function(conn) {
+        validate_expiry_not_past(expiry, quantity)
+
         # 1. insertar movimiento
         # type must be one of: 'entrada', 'salida', 'ajuste', 'vencimiento'
 
         DBI::dbExecute(
             conn,
             "
-      INSERT INTO movimientos_stock (id_producto, tipo_movimiento, cantidad, lote, fecha_vencimiento, ubicacion, nota)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO movimientos_stock (
+        id_producto,
+        tipo_movimiento,
+        cantidad,
+        lote,
+        fecha_vencimiento,
+        ubicacion,
+        usuario,
+        nota
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ",
             params = list(
                 product_id,
@@ -29,6 +41,7 @@ register_adjustment <- function(
                     as.character(expiry)
                 },
                 location,
+                normalize_scalar(usuario),
                 reason
             )
         )
