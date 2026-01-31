@@ -97,18 +97,28 @@ mod_pagos_server <- function(id, pool, current_user = NULL, user_role = NULL) {
             } else if (diff > 0 && monto_pagado > 0) {
                 list(label = "Parcial", class = "text-bg-warning", saldo = diff)
             } else if (diff > 0) {
-                list(label = "Pendiente", class = "text-bg-secondary", saldo = diff)
+                list(
+                    label = "Pendiente",
+                    class = "text-bg-secondary",
+                    saldo = diff
+                )
             } else {
-                list(label = "Sobrepago", class = "text-bg-danger", saldo = diff)
+                list(
+                    label = "Sobrepago",
+                    class = "text-bg-danger",
+                    saldo = diff
+                )
             }
         }
 
         build_provider_label <- function(row) {
             nombre <- row$proveedor_nombre[1]
             empresa <- row$proveedor_empresa[1]
-            if (!is.null(empresa) &&
-                length(empresa) > 0 &&
-                isTRUE(nzchar(empresa))) {
+            if (
+                !is.null(empresa) &&
+                    length(empresa) > 0 &&
+                    isTRUE(nzchar(empresa))
+            ) {
                 paste0(nombre, " (", empresa, ")")
             } else {
                 nombre
@@ -133,14 +143,18 @@ mod_pagos_server <- function(id, pool, current_user = NULL, user_role = NULL) {
                 return()
             }
 
-            labels <- vapply(seq_len(nrow(data)), function(i) {
-                paste0(
-                    "Pedido #",
-                    data$id_pedido[i],
-                    " - ",
-                    build_provider_label(data[i, ])
-                )
-            }, character(1))
+            labels <- vapply(
+                seq_len(nrow(data)),
+                function(i) {
+                    paste0(
+                        "Pedido #",
+                        data$id_pedido[i],
+                        " - ",
+                        build_provider_label(data[i, ])
+                    )
+                },
+                character(1)
+            )
 
             choices <- setNames(data$id_pedido, labels)
             updateSelectInput(
@@ -158,8 +172,10 @@ mod_pagos_server <- function(id, pool, current_user = NULL, user_role = NULL) {
         })
 
         selected_pedido_id <- reactive({
-            if (is.null(input$pago_pedido) ||
-                !nzchar(input$pago_pedido)) {
+            if (
+                is.null(input$pago_pedido) ||
+                    !nzchar(input$pago_pedido)
+            ) {
                 return(NULL)
             }
             as.integer(input$pago_pedido)
@@ -237,7 +253,7 @@ mod_pagos_server <- function(id, pool, current_user = NULL, user_role = NULL) {
                                 as.numeric(monto_pedido)
                             ),
                             min = 0,
-                            step = 0.01,
+                            step = 1,
                             width = "100%"
                         )
                     ),
@@ -384,7 +400,7 @@ mod_pagos_server <- function(id, pool, current_user = NULL, user_role = NULL) {
                     "Monto",
                     value = if (is_edit) as.numeric(pago$monto) else NA,
                     min = 0,
-                    step = 0.01
+                    step = 1
                 ),
                 textInput(
                     ns("pago_metodo"),
@@ -401,7 +417,7 @@ mod_pagos_server <- function(id, pool, current_user = NULL, user_role = NULL) {
                     "Monto facturado",
                     value = if (is_edit) pago$monto_facturado else NA,
                     min = 0,
-                    step = 0.01
+                    step = 1
                 ),
                 textAreaInput(
                     ns("pago_obs"),
