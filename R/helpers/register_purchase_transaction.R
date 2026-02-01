@@ -5,7 +5,7 @@ register_purchase_transaction <- function(
     usuario = NULL
 ) {
     # items is a list of lists, each containing:
-    # list(id = 1, qty = 10, expiry = "2023-01-01", location = "adelante")
+    # list(id = 1, qty = 10, expiry = "2023-01-01", location_id = 1)
 
     pool::poolWithTransaction(pool, function(conn) {
         usuario <- normalize_scalar(usuario)
@@ -102,12 +102,12 @@ register_purchase_transaction <- function(
             }
 
             validate_expiry_not_past(expiry, qty)
-            location <- if (
-                !is.null(item$location) &&
-                    !is.na(item$location) &&
-                    nzchar(item$location)
+            location_id <- if (
+                !is.null(item$location_id) &&
+                    !is.na(item$location_id) &&
+                    nzchar(as.character(item$location_id))
             ) {
-                item$location
+                as.integer(item$location_id)
             } else {
                 NA
             }
@@ -154,7 +154,7 @@ register_purchase_transaction <- function(
             precio_unitario,
             lote,
             fecha_vencimiento,
-            ubicacion,
+            id_ubicacion,
             usuario
           )
           VALUES (?, ?, ?, ?, 'pedido', ?, ?, ?, ?, ?)
@@ -167,7 +167,7 @@ register_purchase_transaction <- function(
                         price,
                         batch,
                         expiry,
-                        location,
+                        location_id,
                         usuario
                     )
                 )
@@ -183,7 +183,7 @@ register_purchase_transaction <- function(
             id_pedido,
             lote,
             fecha_vencimiento,
-            ubicacion,
+            id_ubicacion,
             usuario
           )
           VALUES (?, 'entrada', ?, ?, ?, ?, ?, ?)
@@ -194,7 +194,7 @@ register_purchase_transaction <- function(
                         order_id,
                         batch,
                         expiry,
-                        location,
+                        location_id,
                         usuario
                     )
                 )
@@ -207,8 +207,8 @@ register_purchase_transaction <- function(
                     "SELECT 1 FROM inventario 
            WHERE id_producto = ? 
            AND (lote IS ? OR (lote IS NULL AND ? IS NULL))
-           AND (ubicacion IS ? OR (ubicacion IS NULL AND ? IS NULL))",
-                    params = list(prod_id, batch, batch, location, location)
+           AND (id_ubicacion IS ? OR (id_ubicacion IS NULL AND ? IS NULL))",
+                    params = list(prod_id, batch, batch, location_id, location_id)
                 )
 
                 if (nrow(exists) > 0) {
@@ -219,25 +219,25 @@ register_purchase_transaction <- function(
             SET cantidad_actual = cantidad_actual + ?
             WHERE id_producto = ? 
             AND (lote IS ? OR (lote IS NULL AND ? IS NULL))
-            AND (ubicacion IS ? OR (ubicacion IS NULL AND ? IS NULL))
+            AND (id_ubicacion IS ? OR (id_ubicacion IS NULL AND ? IS NULL))
           ",
                         params = list(
                             qty,
                             prod_id,
                             batch,
                             batch,
-                            location,
-                            location
+                            location_id,
+                            location_id
                         )
                     )
                 } else {
                     DBI::dbExecute(
                         conn,
                         "
-            INSERT INTO inventario (id_producto, cantidad_actual, lote, fecha_vencimiento, ubicacion)
+            INSERT INTO inventario (id_producto, cantidad_actual, lote, fecha_vencimiento, id_ubicacion)
             VALUES (?, ?, ?, ?, ?)
           ",
-                        params = list(prod_id, qty, batch, expiry, location)
+                        params = list(prod_id, qty, batch, expiry, location_id)
                     )
                 }
             }

@@ -2,11 +2,12 @@ test_that("register_purchase_transaction creates pedido, reception and stock", {
   with_test_pool(function(pool) {
     prov <- db_insert_proveedor(pool, activo = 1)
     prod <- db_insert_producto(pool, id_proveedor = prov, precio_compra = 10, activo = 1)
+    loc <- db_insert_ubicacion(pool, "Atras")
 
     register_purchase_transaction(
       pool,
       provider_id = prov,
-      items = list(list(id = prod, qty = 2, expiry = future_date(5), location = "atras")),
+      items = list(list(id = prod, qty = 2, expiry = future_date(5), location_id = loc)),
       usuario = "u"
     )
 
@@ -16,6 +17,23 @@ test_that("register_purchase_transaction creates pedido, reception and stock", {
     expect_equal(db_count(pool, "recepciones_pedidos"), 1)
     expect_equal(db_count(pool, "movimientos_stock"), 1)
     expect_equal(db_count(pool, "inventario"), 1)
+  })
+})
+
+test_that("register_purchase_transaction allows empty location", {
+  with_test_pool(function(pool) {
+    prov <- db_insert_proveedor(pool, activo = 1)
+    prod <- db_insert_producto(pool, id_proveedor = prov, precio_compra = 10, activo = 1)
+
+    register_purchase_transaction(
+      pool,
+      provider_id = prov,
+      items = list(list(id = prod, qty = 1, expiry = future_date(5))),
+      usuario = "u"
+    )
+
+    inv <- DBI::dbGetQuery(pool, "SELECT id_ubicacion FROM inventario WHERE id_producto = ?", params = list(prod))
+    expect_true(is.na(inv$id_ubicacion[1]))
   })
 })
 

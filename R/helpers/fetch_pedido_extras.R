@@ -10,10 +10,12 @@ fetch_pedido_extras <- function(conn, pedido_id) {
             rd.precio_unitario,
             rd.lote,
             rd.fecha_vencimiento,
-            rd.ubicacion
+            rd.id_ubicacion,
+            u.nombre AS ubicacion
         FROM recepciones_pedidos rp
         JOIN recepciones_detalle rd ON rp.id_recepcion = rd.id_recepcion
         JOIN productos p ON rd.id_producto = p.id_producto
+        LEFT JOIN ubicaciones u ON rd.id_ubicacion = u.id_ubicacion
         WHERE rp.id_pedido = ?
           AND rd.tipo = 'extra'
         ORDER BY p.nombre_producto

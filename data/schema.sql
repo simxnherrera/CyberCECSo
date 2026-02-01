@@ -38,17 +38,25 @@ CREATE TABLE productos (
     FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor)
 );
 
+-- tabla de ubicaciones
+CREATE TABLE ubicaciones (
+    id_ubicacion INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL UNIQUE,
+    activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1))
+);
+
 -- tabla de inventario
 CREATE TABLE IF NOT EXISTS inventario (
     id_inventario INTEGER PRIMARY KEY AUTOINCREMENT,
     id_producto INTEGER NOT NULL,
     cantidad_actual REAL NOT NULL DEFAULT 0,
-    ubicacion TEXT,
     lote TEXT,
     fecha_vencimiento DATE,
+    id_ubicacion INTEGER,
     fecha_ultima_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP,
     actualizado_por TEXT,
-    FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
+    FOREIGN KEY (id_producto) REFERENCES productos(id_producto),
+    FOREIGN KEY (id_ubicacion) REFERENCES ubicaciones(id_ubicacion)
 );
 
 -- tabla de pedidos a proveedores
@@ -97,11 +105,12 @@ CREATE TABLE recepciones_detalle (
     precio_unitario REAL,
     lote TEXT,
     fecha_vencimiento DATE,
-    ubicacion TEXT,
+    id_ubicacion INTEGER,
     usuario TEXT,
     FOREIGN KEY (id_recepcion) REFERENCES recepciones_pedidos(id_recepcion),
     FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido),
-    FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
+    FOREIGN KEY (id_producto) REFERENCES productos(id_producto),
+    FOREIGN KEY (id_ubicacion) REFERENCES ubicaciones(id_ubicacion)
 );
 
 -- log de eventos de pedidos (para futura auditoria de usuarios)
@@ -123,13 +132,14 @@ CREATE TABLE movimientos_stock (
     cantidad REAL NOT NULL,
     lote TEXT,
     fecha_vencimiento DATE,
-    ubicacion TEXT,
+    id_ubicacion INTEGER,
     fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     usuario TEXT,
     nota TEXT,
     id_pedido INTEGER,
     FOREIGN KEY (id_producto) REFERENCES productos(id_producto),
-    FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido)
+    FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido),
+    FOREIGN KEY (id_ubicacion) REFERENCES ubicaciones(id_ubicacion)
 );
 
 -- tabla de pagos a proveedores
@@ -152,13 +162,16 @@ CREATE TABLE pagos_proveedores (
 CREATE INDEX idx_productos_proveedor ON productos(id_proveedor);
 CREATE INDEX idx_productos_categoria ON productos(categoria);
 CREATE INDEX idx_inventario_producto ON inventario(id_producto);
+CREATE INDEX idx_inventario_ubicacion ON inventario(id_ubicacion);
 CREATE INDEX idx_movimientos_fecha ON movimientos_stock(fecha);
+CREATE INDEX idx_movimientos_ubicacion ON movimientos_stock(id_ubicacion);
 CREATE INDEX idx_pedidos_proveedor ON pedidos_proveedores(id_proveedor);
 CREATE INDEX idx_pedidos_estado ON pedidos_proveedores(estado);
 CREATE INDEX idx_detalle_pedido ON detalle_pedidos(id_pedido);
 CREATE INDEX idx_recepciones_pedido ON recepciones_pedidos(id_pedido);
 CREATE INDEX idx_recepciones_detalle_pedido ON recepciones_detalle(id_pedido);
 CREATE INDEX idx_recepciones_detalle_producto ON recepciones_detalle(id_producto);
+CREATE INDEX idx_recepciones_detalle_ubicacion ON recepciones_detalle(id_ubicacion);
 CREATE INDEX idx_eventos_pedido ON pedidos_eventos(id_pedido);
 CREATE INDEX idx_pagos_proveedor ON pagos_proveedores(id_proveedor);
 CREATE INDEX idx_pagos_pedido ON pagos_proveedores(id_pedido);

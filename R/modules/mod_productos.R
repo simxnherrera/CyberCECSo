@@ -3,65 +3,83 @@ mod_productos_ui <- function(id) {
 
     tabPanel(
         "Productos",
-        layout_columns(
-            # ingreso de productos
-            card(
-                card_header("Nuevo producto"),
-                textInput(ns("p_nombre"), "Nombre del producto"),
-                selectInput(
-                    ns("p_proveedor"),
-                    "Proveedor",
-                    choices = c("Sin proveedor asignado" = "")
+        tagList(
+            layout_columns(
+                # ingreso de productos
+                card(
+                    card_header("Nuevo producto"),
+                    textInput(ns("p_nombre"), "Nombre del producto"),
+                    selectInput(
+                        ns("p_proveedor"),
+                        "Proveedor",
+                        choices = c("Sin proveedor asignado" = "")
+                    ),
+                    textInput(
+                        ns("p_unidad"),
+                        "Unidad de medida",
+                        placeholder = "kg, pieza, caja..."
+                    ),
+                    numericInput(
+                        ns("p_precio_compra"),
+                        "Precio de compra",
+                        value = NA,
+                        min = 0,
+                        step = 1
+                    ),
+                    numericInput(
+                        ns("p_precio_venta"),
+                        "Precio de venta",
+                        value = NA,
+                        min = 0,
+                        step = 1
+                    ),
+                    textInput(ns("p_categoria"), "Categoría"),
+                    numericInput(
+                        ns("p_min_qty"),
+                        "Cantidad mínima",
+                        value = 0,
+                        min = 0,
+                        step = 1
+                    ),
+                    checkboxInput(
+                        ns("p_perecedero"),
+                        "Producto perecedero",
+                        value = FALSE
+                    ),
+                    checkboxInput(ns("p_activo"), "Activo", value = TRUE),
+                    uiOutput(ns("prod_save_buttons"))
                 ),
-                textInput(
-                    ns("p_unidad"),
-                    "Unidad de medida",
-                    placeholder = "kg, pieza, caja..."
+                # tabla de productos
+                card(
+                    card_header(
+                        class = "d-flex justify-content-between align-items-center",
+                        "Productos",
+                        actionButton(
+                            ns("btn_edit_prod"),
+                            "Editar selección",
+                            class = "btn-sm btn-outline-secondary"
+                        )
+                    ),
+                    DT::DTOutput(ns("tabla_productos"))
                 ),
-                numericInput(
-                    ns("p_precio_compra"),
-                    "Precio de compra",
-                    value = NA,
-                    min = 0,
-                    step = 1
-                ),
-                numericInput(
-                    ns("p_precio_venta"),
-                    "Precio de venta",
-                    value = NA,
-                    min = 0,
-                    step = 1
-                ),
-                textInput(ns("p_categoria"), "Categoría"),
-                numericInput(
-                    ns("p_min_qty"),
-                    "Cantidad mínima",
-                    value = 0,
-                    min = 0,
-                    step = 1
-                ),
-                checkboxInput(
-                    ns("p_perecedero"),
-                    "Producto perecedero",
-                    value = FALSE
-                ),
-                checkboxInput(ns("p_activo"), "Activo", value = TRUE),
-                uiOutput(ns("prod_save_buttons"))
+                col_widths = c(4, 8)
             ),
-            # tabla de productos
             card(
+                class = "mt-3",
                 card_header(
                     class = "d-flex justify-content-between align-items-center",
-                    "Productos",
+                    "Ubicaciones",
                     actionButton(
-                        ns("btn_edit_prod"),
+                        ns("btn_edit_ubic"),
                         "Editar selección",
                         class = "btn-sm btn-outline-secondary"
                     )
                 ),
-                DT::DTOutput(ns("tabla_productos"))
-            ),
-            col_widths = c(4, 8)
+                textInput(ns("u_nombre"), "Nombre de ubicación"),
+                checkboxInput(ns("u_activo"), "Activa", value = TRUE),
+                uiOutput(ns("ubic_save_buttons")),
+                DT::DTOutput(ns("tabla_ubicaciones"))
+            )
         )
     )
 }
@@ -91,6 +109,7 @@ mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NUL
 
         # cargar lista inicial de productos
         productos <- reactiveVal(fetch_productos(pool))
+        ubicaciones <- reactiveVal(fetch_ubicaciones(pool))
 
         # actualizar selector de proveedores cuando cambie la lista
         observe({
@@ -144,7 +163,27 @@ mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NUL
             )
         })
 
+        output$tabla_ubicaciones <- DT::renderDT({
+            data <- ubicaciones() |>
+                select(
+                    nombre,
+                    activo
+                ) |>
+                rename(
+                    "Ubicación" = nombre,
+                    "Activa" = activo
+                )
+
+            DT::datatable(
+                data,
+                selection = "single",
+                options = list(pageLength = 6),
+                rownames = FALSE
+            )
+        })
+
         editing_prod_id <- reactiveVal(NULL)
+        editing_ubic_id <- reactiveVal(NULL)
 
         output$prod_save_buttons <- renderUI({
             if (is.null(editing_prod_id())) {
@@ -167,6 +206,35 @@ mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NUL
                     ),
                     actionButton(
                         ns("p_delete"),
+                        "Eliminar",
+                        class = "btn-danger ms-2",
+                        icon = icon("trash")
+                    )
+                )
+            }
+        })
+
+        output$ubic_save_buttons <- renderUI({
+            if (is.null(editing_ubic_id())) {
+                actionButton(
+                    ns("u_guardar"),
+                    "Guardar ubicación",
+                    class = "btn-primary"
+                )
+            } else {
+                tagList(
+                    actionButton(
+                        ns("u_guardar"),
+                        "Actualizar ubicación",
+                        class = "btn-warning"
+                    ),
+                    actionButton(
+                        ns("u_cancel"),
+                        "Cancelar",
+                        class = "btn-secondary ms-2"
+                    ),
+                    actionButton(
+                        ns("u_delete"),
                         "Eliminar",
                         class = "btn-danger ms-2",
                         icon = icon("trash")
@@ -225,6 +293,25 @@ mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NUL
             editing_prod_id(row$id_producto)
         })
 
+        observeEvent(input$btn_edit_ubic, {
+            if (!require_admin()) {
+                return()
+            }
+            req(input$tabla_ubicaciones_rows_selected)
+
+            sel_idx <- input$tabla_ubicaciones_rows_selected
+            ubic_data <- ubicaciones()
+            row <- ubic_data[sel_idx, ]
+
+            updateTextInput(session, "u_nombre", value = row$nombre)
+            updateCheckboxInput(
+                session,
+                "u_activo",
+                value = as.logical(row$activo)
+            )
+            editing_ubic_id(row$id_ubicacion)
+        })
+
         observeEvent(input$p_cancel, {
             if (!require_admin()) {
                 return()
@@ -239,6 +326,15 @@ mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NUL
             updateCheckboxInput(session, "p_perecedero", value = FALSE)
             updateCheckboxInput(session, "p_activo", value = TRUE)
             editing_prod_id(NULL)
+        })
+
+        observeEvent(input$u_cancel, {
+            if (!require_admin()) {
+                return()
+            }
+            updateTextInput(session, "u_nombre", value = "")
+            updateCheckboxInput(session, "u_activo", value = TRUE)
+            editing_ubic_id(NULL)
         })
 
         # guardar/actualizar producto
@@ -294,6 +390,48 @@ mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NUL
             updateCheckboxInput(session, "p_activo", value = TRUE)
         })
 
+        # guardar/actualizar ubicación
+        observeEvent(input$u_guardar, {
+            if (!require_admin()) {
+                return()
+            }
+            req(input$u_nombre)
+
+            data <- list(
+                nombre = input$u_nombre,
+                activo = as.integer(isTRUE(input$u_activo))
+            )
+
+            tryCatch(
+                {
+                    if (is.null(editing_ubic_id())) {
+                        insert_ubicacion(pool, data)
+                        showNotification(
+                            "Ubicación guardada",
+                            type = "message"
+                        )
+                    } else {
+                        update_ubicacion(pool, editing_ubic_id(), data)
+                        showNotification(
+                            "Ubicación actualizada",
+                            type = "message"
+                        )
+                        editing_ubic_id(NULL)
+                    }
+
+                    ubicaciones(fetch_ubicaciones(pool))
+                    updateTextInput(session, "u_nombre", value = "")
+                    updateCheckboxInput(session, "u_activo", value = TRUE)
+                },
+                error = function(e) {
+                    showNotification(
+                        paste("Error al guardar:", e$message),
+                        type = "error"
+                    )
+                }
+            )
+        })
+
         # eliminar producto
         observeEvent(input$p_delete, {
             if (!require_admin()) {
@@ -308,6 +446,27 @@ mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NUL
                     modalButton("Cancelar"),
                     actionButton(
                         ns("confirm_delete_prod"),
+                        "Eliminar",
+                        class = "btn-danger"
+                    )
+                )
+            ))
+        })
+
+        # eliminar ubicación
+        observeEvent(input$u_delete, {
+            if (!require_admin()) {
+                return()
+            }
+            req(editing_ubic_id())
+
+            showModal(modalDialog(
+                title = "Confirmar eliminación",
+                "¿Está seguro de que desea eliminar esta ubicación? Esta acción no se puede deshacer.",
+                footer = tagList(
+                    modalButton("Cancelar"),
+                    actionButton(
+                        ns("confirm_delete_ubic"),
                         "Eliminar",
                         class = "btn-danger"
                     )
@@ -353,6 +512,34 @@ mod_productos_server <- function(id, pool, proveedores_reactive, user_role = NUL
             )
         })
 
-        return(productos)
+        observeEvent(input$confirm_delete_ubic, {
+            if (!require_admin()) {
+                return()
+            }
+            req(editing_ubic_id())
+            removeModal()
+
+            tryCatch(
+                {
+                    delete_ubicacion(pool, editing_ubic_id())
+                    showNotification(
+                        "Ubicación eliminada",
+                        type = "message"
+                    )
+                    ubicaciones(fetch_ubicaciones(pool))
+                    updateTextInput(session, "u_nombre", value = "")
+                    updateCheckboxInput(session, "u_activo", value = TRUE)
+                    editing_ubic_id(NULL)
+                },
+                error = function(e) {
+                    showNotification(
+                        paste("Error al eliminar:", e$message),
+                        type = "error"
+                    )
+                }
+            )
+        })
+
+        return(list(productos = productos, ubicaciones = ubicaciones))
     })
 }

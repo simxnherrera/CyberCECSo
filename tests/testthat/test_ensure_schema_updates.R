@@ -1,6 +1,7 @@
 test_that("ensure_schema_updates creates missing tables", {
   with_test_pool(function(pool) {
     ensure_schema_updates(pool)
+    expect_true(DBI::dbExistsTable(pool, "ubicaciones"))
     expect_true(DBI::dbExistsTable(pool, "recepciones_pedidos"))
     expect_true(DBI::dbExistsTable(pool, "recepciones_detalle"))
     expect_true(DBI::dbExistsTable(pool, "pedidos_eventos"))

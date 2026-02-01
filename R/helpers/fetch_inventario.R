@@ -36,7 +36,8 @@ fetch_inventario <- function(
         p.unidad_medida,
         i.cantidad_actual,
         i.lote,
-        i.ubicacion,
+        i.id_ubicacion,
+        u.nombre AS ubicacion,
         i.fecha_vencimiento,
         i.fecha_ultima_actualizacion,
         p.cantidad_minima,
@@ -56,6 +57,7 @@ fetch_inventario <- function(
         END as estado_vencimiento
       FROM inventario i
       INNER JOIN productos p ON i.id_producto = p.id_producto
+      LEFT JOIN ubicaciones u ON i.id_ubicacion = u.id_ubicacion
       WHERE p.activo = 1 AND i.cantidad_actual > 0
     "
 
@@ -100,12 +102,14 @@ fetch_inventario <- function(
         p.nombre_producto,
         p.unidad_medida,
         IFNULL(i.cantidad_actual, 0) as cantidad_actual,
-        IFNULL(i.ubicacion, '') as ubicacion,
+        i.id_ubicacion,
+        IFNULL(u.nombre, '') as ubicacion,
         IFNULL(i.lote, '') as lote,
         IFNULL(i.fecha_vencimiento, '') as fecha_vencimiento,
         i.fecha_ultima_actualizacion
       FROM productos p
       LEFT JOIN inventario i ON p.id_producto = i.id_producto
+      LEFT JOIN ubicaciones u ON i.id_ubicacion = u.id_ubicacion
       WHERE p.activo = 1
       ORDER BY p.nombre_producto, i.fecha_vencimiento
       "

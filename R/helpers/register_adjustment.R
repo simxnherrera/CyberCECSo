@@ -5,7 +5,7 @@ register_adjustment <- function(
     quantity,
     reason,
     batch = NA,
-    location = NA,
+    location_id = NA,
     expiry = NA,
     usuario = NULL
 ) {
@@ -24,7 +24,7 @@ register_adjustment <- function(
         cantidad,
         lote,
         fecha_vencimiento,
-        ubicacion,
+        id_ubicacion,
         usuario,
         nota
       )
@@ -40,7 +40,7 @@ register_adjustment <- function(
                 } else {
                     as.character(expiry)
                 },
-                location,
+                location_id,
                 normalize_scalar(usuario),
                 reason
             )
@@ -60,9 +60,9 @@ register_adjustment <- function(
             "SELECT cantidad_actual FROM inventario 
        WHERE id_producto = ? 
        AND (lote IS ? OR (lote IS NULL AND ? IS NULL))
-       AND (ubicacion IS ? OR (ubicacion IS NULL AND ? IS NULL))
+       AND (id_ubicacion IS ? OR (id_ubicacion IS NULL AND ? IS NULL))
        LIMIT 1",
-            params = list(product_id, batch, batch, location, location)
+            params = list(product_id, batch, batch, location_id, location_id)
         )
 
         if (nrow(current_row) > 0) {
@@ -82,15 +82,15 @@ register_adjustment <- function(
         SET cantidad_actual = cantidad_actual + ?
         WHERE id_producto = ? 
         AND (lote IS ? OR (lote IS NULL AND ? IS NULL))
-        AND (ubicacion IS ? OR (ubicacion IS NULL AND ? IS NULL))
+        AND (id_ubicacion IS ? OR (id_ubicacion IS NULL AND ? IS NULL))
         ",
                 params = list(
                     qty_change,
                     product_id,
                     batch,
                     batch,
-                    location,
-                    location
+                    location_id,
+                    location_id
                 )
             )
         } else {
@@ -101,7 +101,7 @@ register_adjustment <- function(
             DBI::dbExecute(
                 conn,
                 "
-        INSERT INTO inventario (id_producto, cantidad_actual, lote, fecha_vencimiento, ubicacion)
+        INSERT INTO inventario (id_producto, cantidad_actual, lote, fecha_vencimiento, id_ubicacion)
         VALUES (?, ?, ?, ?, ?)
         ",
                 params = list(
@@ -113,7 +113,7 @@ register_adjustment <- function(
                     } else {
                         as.character(expiry)
                     },
-                    location
+                    location_id
                 )
             )
         }

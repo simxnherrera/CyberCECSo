@@ -87,15 +87,15 @@ register_pedido_recepcion <- function(
             qty,
             batch,
             expiry,
-            location
+            location_id
         ) {
             exists <- DBI::dbGetQuery(
                 conn,
                 "SELECT 1 FROM inventario 
                  WHERE id_producto = ? 
                  AND (lote IS ? OR (lote IS NULL AND ? IS NULL))
-                 AND (ubicacion IS ? OR (ubicacion IS NULL AND ? IS NULL))",
-                params = list(prod_id, batch, batch, location, location)
+                 AND (id_ubicacion IS ? OR (id_ubicacion IS NULL AND ? IS NULL))",
+                params = list(prod_id, batch, batch, location_id, location_id)
             )
 
             if (nrow(exists) > 0) {
@@ -106,15 +106,15 @@ register_pedido_recepcion <- function(
                     SET cantidad_actual = cantidad_actual + ?
                     WHERE id_producto = ? 
                     AND (lote IS ? OR (lote IS NULL AND ? IS NULL))
-                    AND (ubicacion IS ? OR (ubicacion IS NULL AND ? IS NULL))
+                    AND (id_ubicacion IS ? OR (id_ubicacion IS NULL AND ? IS NULL))
                     ",
                     params = list(
                         qty,
                         prod_id,
                         batch,
                         batch,
-                        location,
-                        location
+                        location_id,
+                        location_id
                     )
                 )
             } else {
@@ -126,11 +126,11 @@ register_pedido_recepcion <- function(
                         cantidad_actual,
                         lote,
                         fecha_vencimiento,
-                        ubicacion
+                        id_ubicacion
                     )
                     VALUES (?, ?, ?, ?, ?)
                     ",
-                    params = list(prod_id, qty, batch, expiry, location)
+                    params = list(prod_id, qty, batch, expiry, location_id)
                 )
             }
         }
@@ -154,7 +154,7 @@ register_pedido_recepcion <- function(
                     id = row$id_producto[1],
                     qty = qty - max_qty,
                     expiry = item$expiry,
-                    location = item$location
+                    location_id = item$location_id
                 )
                 qty <- max_qty
             }
@@ -170,12 +170,12 @@ register_pedido_recepcion <- function(
             }
 
             validate_expiry_not_past(expiry, qty)
-            location <- if (
-                !is.null(item$location) &&
-                    !is.na(item$location) &&
-                    nzchar(item$location)
+            location_id <- if (
+                !is.null(item$location_id) &&
+                    !is.na(item$location_id) &&
+                    nzchar(as.character(item$location_id))
             ) {
-                item$location
+                as.integer(item$location_id)
             } else {
                 NA
             }
@@ -199,7 +199,7 @@ register_pedido_recepcion <- function(
                     precio_unitario,
                     lote,
                     fecha_vencimiento,
-                    ubicacion,
+                    id_ubicacion,
                     usuario
                 )
                 VALUES (?, ?, ?, ?, 'pedido', ?, ?, ?, ?, ?)
@@ -212,7 +212,7 @@ register_pedido_recepcion <- function(
                     row$precio_unitario[1],
                     batch,
                     expiry,
-                    location,
+                    location_id,
                     usuario
                 )
             )
@@ -238,7 +238,7 @@ register_pedido_recepcion <- function(
                         id_pedido,
                         lote,
                         fecha_vencimiento,
-                        ubicacion,
+                        id_ubicacion,
                         usuario,
                         nota
                     )
@@ -250,7 +250,7 @@ register_pedido_recepcion <- function(
                         pedido_id,
                         batch,
                         expiry,
-                        location,
+                        location_id,
                         usuario,
                         "Recepcion pedido"
                     )
@@ -261,7 +261,7 @@ register_pedido_recepcion <- function(
                     qty = qty,
                     batch = batch,
                     expiry = expiry,
-                    location = location
+                    location_id = location_id
                 )
             }
         }
@@ -314,12 +314,12 @@ register_pedido_recepcion <- function(
                 }
 
                 validate_expiry_not_past(expiry, qty)
-                location <- if (
-                    !is.null(extra$location) &&
-                        !is.na(extra$location) &&
-                        nzchar(extra$location)
+                location_id <- if (
+                    !is.null(extra$location_id) &&
+                        !is.na(extra$location_id) &&
+                        nzchar(as.character(extra$location_id))
                 ) {
-                    extra$location
+                    as.integer(extra$location_id)
                 } else {
                     NA
                 }
@@ -340,7 +340,7 @@ register_pedido_recepcion <- function(
                         precio_unitario,
                         lote,
                         fecha_vencimiento,
-                        ubicacion,
+                        id_ubicacion,
                         usuario
                     )
                     VALUES (?, ?, ?, ?, 'extra', ?, ?, ?, ?, ?)
@@ -353,7 +353,7 @@ register_pedido_recepcion <- function(
                         price,
                         batch,
                         expiry,
-                        location,
+                        location_id,
                         usuario
                     )
                 )
@@ -368,7 +368,7 @@ register_pedido_recepcion <- function(
                         id_pedido,
                         lote,
                         fecha_vencimiento,
-                        ubicacion,
+                        id_ubicacion,
                         usuario,
                         nota
                     )
@@ -380,7 +380,7 @@ register_pedido_recepcion <- function(
                         pedido_id,
                         batch,
                         expiry,
-                        location,
+                        location_id,
                         usuario,
                         "Recepcion pedido (extra)"
                     )
@@ -391,7 +391,7 @@ register_pedido_recepcion <- function(
                     qty = qty,
                     batch = batch,
                     expiry = expiry,
-                    location = location
+                    location_id = location_id
                 )
             }
         }

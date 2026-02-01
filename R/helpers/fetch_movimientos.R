@@ -13,11 +13,13 @@ fetch_movimientos <- function(
       m.cantidad,
       m.fecha,
       m.lote,
-      m.ubicacion,
+      m.id_ubicacion,
+      u.nombre AS ubicacion,
       m.nota,
       m.usuario
     FROM movimientos_stock m
     JOIN productos p ON m.id_producto = p.id_producto
+    LEFT JOIN ubicaciones u ON m.id_ubicacion = u.id_ubicacion
     WHERE 1=1
   "
 

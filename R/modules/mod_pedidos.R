@@ -58,6 +58,7 @@ mod_pedidos_server <- function(
     pool,
     proveedores_reactive,
     productos_reactive,
+    ubicaciones_reactive,
     movimientos_trigger,
     inventario_trigger,
     current_user = NULL,
@@ -71,6 +72,26 @@ mod_pedidos_server <- function(
         }
         if (is.null(user_role)) {
             user_role <- reactiveVal("becarix")
+        }
+
+        build_location_choices <- function(include_empty = TRUE) {
+            if (is.null(ubicaciones_reactive)) {
+                return(if (include_empty) c("Sin ubicación" = "") else NULL)
+            }
+            data <- ubicaciones_reactive()
+            if (is.null(data) || nrow(data) == 0) {
+                return(if (include_empty) c("Sin ubicación" = "") else NULL)
+            }
+            data <- data[data$activo == 1, ]
+            if (nrow(data) == 0) {
+                return(if (include_empty) c("Sin ubicación" = "") else NULL)
+            }
+            choices <- setNames(as.character(data$id_ubicacion), data$nombre)
+            if (include_empty) {
+                c("Sin ubicación" = "", choices)
+            } else {
+                choices
+            }
         }
 
         can_create_pedido <- reactive({
@@ -893,6 +914,7 @@ mod_pedidos_server <- function(
             recepcion_pedido_id(pedido_id)
             recepcion_proveedor_id(row$id_proveedor[1])
             extras_list(list())
+            loc_choices <- build_location_choices()
 
             showModal(modalDialog(
                 title = paste(
@@ -917,12 +939,8 @@ mod_pedidos_server <- function(
                 selectInput(
                     ns("extra_location"),
                     "Ubicacion",
-                    choices = c(
-                        "Adelante" = "adelante",
-                        "Atras" = "atras",
-                        "Freezer" = "freezer"
-                    ),
-                    selected = "atras"
+                    choices = loc_choices,
+                    selected = ""
                 ),
                 actionButton(
                     ns("add_extra"),
@@ -977,6 +995,8 @@ mod_pedidos_server <- function(
             if (nrow(detalle) == 0) {
                 return(p("Este pedido no tiene items."))
             }
+
+            loc_choices <- build_location_choices()
 
             do.call(
                 tagList,
@@ -1039,12 +1059,8 @@ mod_pedidos_server <- function(
                                         detalle$id_detalle[i]
                                     )),
                                     label = NULL,
-                                    choices = c(
-                                        "Adelante" = "adelante",
-                                        "Atras" = "atras",
-                                        "Freezer" = "freezer"
-                                    ),
-                                    selected = "atras",
+                                    choices = loc_choices,
+                                    selected = "",
                                     width = "100%"
                                 )
                             )
@@ -1120,13 +1136,20 @@ mod_pedidos_server <- function(
                 }
             }
 
+            loc_val <- input$extra_location
+            loc_id <- if (!is.null(loc_val) && nzchar(loc_val)) {
+                as.integer(loc_val)
+            } else {
+                NA
+            }
+
             extras <- extras_list()
             extras[[length(extras) + 1]] <- list(
                 id = as.integer(input$extra_product),
                 label = label,
                 qty = qty,
                 expiry = expiry_val,
-                location = input$extra_location,
+                location_id = loc_id,
                 perecedero = is_perishable
             )
             extras_list(extras)
@@ -1189,6 +1212,8 @@ mod_pedidos_server <- function(
                             is.na(loc_val) ||
                             !nzchar(loc_val)) {
                             loc_val <- NA
+                        } else {
+                            loc_val <- as.integer(loc_val)
                         }
 
                         is_perishable <- isTRUE(
@@ -1211,7 +1236,7 @@ mod_pedidos_server <- function(
                             id_producto = detalle$id_producto[i],
                             qty = qty_val,
                             expiry = exp_val,
-                            location = loc_val
+                            location_id = loc_val
                         )
                     }
 

@@ -3,6 +3,17 @@ ensure_schema_updates <- function(conn) {
     DBI::dbExecute(
         conn,
         "
+        CREATE TABLE IF NOT EXISTS ubicaciones (
+            id_ubicacion INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL UNIQUE,
+            activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1))
+        )
+    "
+    )
+
+    DBI::dbExecute(
+        conn,
+        "
         CREATE TABLE IF NOT EXISTS recepciones_pedidos (
             id_recepcion INTEGER PRIMARY KEY AUTOINCREMENT,
             id_pedido INTEGER NOT NULL UNIQUE,
@@ -27,11 +38,12 @@ ensure_schema_updates <- function(conn) {
             precio_unitario REAL,
             lote TEXT,
             fecha_vencimiento DATE,
-            ubicacion TEXT,
+            id_ubicacion INTEGER,
             usuario TEXT,
             FOREIGN KEY (id_recepcion) REFERENCES recepciones_pedidos(id_recepcion),
             FOREIGN KEY (id_pedido) REFERENCES pedidos_proveedores(id_pedido),
-            FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
+            FOREIGN KEY (id_producto) REFERENCES productos(id_producto),
+            FOREIGN KEY (id_ubicacion) REFERENCES ubicaciones(id_ubicacion)
         )
     "
     )
@@ -96,6 +108,23 @@ ensure_schema_updates <- function(conn) {
         "CREATE INDEX IF NOT EXISTS idx_pagos_pedido ON pagos_proveedores(id_pedido)"
     )
 
+    add_column_if_missing(conn, "inventario", "id_ubicacion", "INTEGER")
+    add_column_if_missing(conn, "recepciones_detalle", "id_ubicacion", "INTEGER")
+    add_column_if_missing(conn, "movimientos_stock", "id_ubicacion", "INTEGER")
+
+    DBI::dbExecute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_recepciones_detalle_ubicacion ON recepciones_detalle(id_ubicacion)"
+    )
+    DBI::dbExecute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_inventario_ubicacion ON inventario(id_ubicacion)"
+    )
+    DBI::dbExecute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_movimientos_ubicacion ON movimientos_stock(id_ubicacion)"
+    )
+
     # migracion de estado para incluir 'realizado'
     pedido_sql <- DBI::dbGetQuery(
         conn,
@@ -109,6 +138,23 @@ ensure_schema_updates <- function(conn) {
     }
 
     ensure_usuarios_schema(conn)
+}
+
+add_column_if_missing <- function(conn, table, column, type) {
+    if (!DBI::dbExistsTable(conn, table)) {
+        return(invisible(FALSE))
+    }
+
+    cols <- DBI::dbGetQuery(conn, paste0("PRAGMA table_info(", table, ")"))$name
+    if (column %in% cols) {
+        return(invisible(FALSE))
+    }
+
+    DBI::dbExecute(
+        conn,
+        sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, type)
+    )
+    invisible(TRUE)
 }
 
 migrate_pedidos_estado <- function(conn) {

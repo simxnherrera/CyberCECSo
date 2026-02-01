@@ -46,26 +46,32 @@ mod_inventario_ui <- function(id) {
                             "Sin fecha" = "sin_fecha"
                         ),
                         selected = "all"
+                    ),
+                    div(
+                        class = "d-flex flex-wrap gap-2 mt-3",
+                        actionButton(
+                            ns("btn_register_expiry"),
+                            "Registrar vencimiento del lote seleccionado",
+                            class = "btn-warning btn-sm",
+                            icon = icon("trash")
+                        ),
+                        actionButton(
+                            ns("btn_move_lot"),
+                            "Mover lote",
+                            class = "btn-outline-primary btn-sm",
+                            icon = icon("arrows-up-down-left-right")
+                        ),
+                        actionButton(
+                            ns("btn_adjust_lot"),
+                            "Ajustar lote",
+                            class = "btn-outline-secondary btn-sm",
+                            icon = icon("sliders")
+                        )
                     )
                 )
             ),
             # tabla de inventario
-            DT::DTOutput(ns("tabla_inventario")),
-            conditionalPanel(
-                condition = sprintf(
-                    "input['%s'] == 'detailed'",
-                    ns("inv_view_mode")
-                ),
-                div(
-                    class = "mt-5",
-                    actionButton(
-                        ns("btn_register_expiry"),
-                        "Registrar vencimiento del lote seleccionado",
-                        class = "btn-warning btn-sm",
-                        icon = icon("trash")
-                    )
-                )
-            )
+            DT::DTOutput(ns("tabla_inventario"))
         )
     )
 }
@@ -75,6 +81,7 @@ mod_inventario_server <- function(
     pool,
     productos_reactive,
     proveedores_reactive,
+    ubicaciones_reactive,
     movimientos_trigger,
     inventario_trigger_external = NULL,
     current_user = NULL
@@ -86,11 +93,33 @@ mod_inventario_server <- function(
             current_user <- reactiveVal(NULL)
         }
 
+        build_location_choices <- function(include_empty = TRUE) {
+            if (is.null(ubicaciones_reactive)) {
+                return(if (include_empty) c("Sin ubicación" = "") else NULL)
+            }
+            data <- ubicaciones_reactive()
+            if (is.null(data) || nrow(data) == 0) {
+                return(if (include_empty) c("Sin ubicación" = "") else NULL)
+            }
+            data <- data[data$activo == 1, ]
+            if (nrow(data) == 0) {
+                return(if (include_empty) c("Sin ubicación" = "") else NULL)
+            }
+            choices <- setNames(as.character(data$id_ubicacion), data$nombre)
+            if (include_empty) {
+                c("Sin ubicación" = "", choices)
+            } else {
+                choices
+            }
+        }
+
         # lógica de inventario
         # --------------------
 
         # trigger para refrescar inventario
         inventario_trigger_local <- reactiveVal(0)
+        pending_move_inventario_id <- reactiveVal(NULL)
+        pending_adjust_lot_id <- reactiveVal(NULL)
 
         # reactive para datos de inventario basados en el modo de vista
         inventario_data <- reactive({
@@ -319,6 +348,267 @@ mod_inventario_server <- function(
             ))
         })
 
+        observeEvent(input$btn_move_lot, {
+            req(input$tabla_inventario_rows_selected)
+
+            sel_idx <- input$tabla_inventario_rows_selected
+            data <- inventario_data()
+            row <- data[sel_idx, ]
+
+            inv_record <- fetch_inventario(pool, mode = "detailed") |>
+                filter(id_inventario == row$id_inventario)
+
+            if (nrow(inv_record) == 0) {
+                showNotification(
+                    "No se pudo encontrar el registro",
+                    type = "error"
+                )
+                return()
+            }
+
+            current_loc_id <- inv_record$id_ubicacion[1]
+            loc_choices <- build_location_choices()
+            if (!is.na(current_loc_id)) {
+                loc_choices <- loc_choices[names(loc_choices) != as.character(current_loc_id)]
+            } else {
+                loc_choices <- loc_choices[names(loc_choices) != ""]
+            }
+
+            if (length(loc_choices) == 0) {
+                showNotification(
+                    "No hay otra ubicación disponible para mover.",
+                    type = "warning"
+                )
+                return()
+            }
+
+            pending_move_inventario_id(inv_record$id_inventario[1])
+
+            showModal(modalDialog(
+                title = "Mover lote",
+                tags$dl(
+                    class = "row",
+                    tags$dt(class = "col-sm-4", "Producto:"),
+                    tags$dd(class = "col-sm-8", inv_record$nombre_producto),
+                    tags$dt(class = "col-sm-4", "Lote:"),
+                    tags$dd(
+                        class = "col-sm-8",
+                        ifelse(is.na(inv_record$lote), "N/A", inv_record$lote)
+                    ),
+                    tags$dt(class = "col-sm-4", "Ubicación actual:"),
+                    tags$dd(
+                        class = "col-sm-8",
+                        ifelse(
+                            is.na(inv_record$ubicacion) || !nzchar(inv_record$ubicacion),
+                            "Sin ubicación",
+                            inv_record$ubicacion
+                        )
+                    ),
+                    tags$dt(class = "col-sm-4", "Cantidad:"),
+                    tags$dd(
+                        class = "col-sm-8",
+                        paste(
+                            inv_record$cantidad_actual,
+                            inv_record$unidad_medida
+                        )
+                    )
+                ),
+                selectInput(
+                    ns("move_location"),
+                    "Nueva ubicación",
+                    choices = loc_choices,
+                    selected = ""
+                ),
+                footer = tagList(
+                    modalButton("Cancelar"),
+                    actionButton(
+                        ns("confirm_move_lot"),
+                        "Mover",
+                        class = "btn-primary"
+                    )
+                )
+            ))
+        })
+
+        observeEvent(input$confirm_move_lot, {
+            req(pending_move_inventario_id())
+            new_loc <- input$move_location
+            if (is.null(new_loc)) {
+                showNotification(
+                    "Selecciona una ubicación.",
+                    type = "error"
+                )
+                return()
+            }
+            new_loc <- if (nzchar(new_loc)) as.integer(new_loc) else NA
+
+            tryCatch(
+                {
+                    move_inventario_lote(
+                        pool,
+                        pending_move_inventario_id(),
+                        new_location_id = new_loc,
+                        usuario = current_user()
+                    )
+                    showNotification(
+                        "Lote movido correctamente",
+                        type = "message"
+                    )
+                    pending_move_inventario_id(NULL)
+                    removeModal()
+                    inventario_trigger_local(inventario_trigger_local() + 1)
+                    movimientos_trigger(movimientos_trigger() + 1)
+                },
+                error = function(e) {
+                    showNotification(
+                        paste("Error:", e$message),
+                        type = "error"
+                    )
+                }
+            )
+        })
+
+        observeEvent(input$btn_adjust_lot, {
+            req(input$tabla_inventario_rows_selected)
+
+            sel_idx <- input$tabla_inventario_rows_selected
+            data <- inventario_data()
+            row <- data[sel_idx, ]
+
+            inv_record <- fetch_inventario(pool, mode = "detailed") |>
+                filter(id_inventario == row$id_inventario)
+
+            if (nrow(inv_record) == 0) {
+                showNotification(
+                    "No se pudo encontrar el registro",
+                    type = "error"
+                )
+                return()
+            }
+
+            pending_adjust_lot_id(inv_record$id_inventario[1])
+
+            showModal(modalDialog(
+                title = "Ajustar lote",
+                tags$dl(
+                    class = "row",
+                    tags$dt(class = "col-sm-4", "Producto:"),
+                    tags$dd(class = "col-sm-8", inv_record$nombre_producto),
+                    tags$dt(class = "col-sm-4", "Lote:"),
+                    tags$dd(
+                        class = "col-sm-8",
+                        ifelse(is.na(inv_record$lote), "N/A", inv_record$lote)
+                    ),
+                    tags$dt(class = "col-sm-4", "Ubicación:"),
+                    tags$dd(
+                        class = "col-sm-8",
+                        ifelse(
+                            is.na(inv_record$ubicacion) || !nzchar(inv_record$ubicacion),
+                            "Sin ubicación",
+                            inv_record$ubicacion
+                        )
+                    ),
+                    tags$dt(class = "col-sm-4", "Cantidad actual:"),
+                    tags$dd(
+                        class = "col-sm-8",
+                        paste(
+                            inv_record$cantidad_actual,
+                            inv_record$unidad_medida
+                        )
+                    )
+                ),
+                numericInput(
+                    ns("adjust_lot_qty"),
+                    "Cantidad a ajustar",
+                    value = NA,
+                    min = 0,
+                    step = 1
+                ),
+                radioButtons(
+                    ns("adjust_lot_direction"),
+                    "Acción",
+                    choices = c("Sumar" = "add", "Restar" = "remove"),
+                    selected = "add",
+                    inline = TRUE
+                ),
+                textAreaInput(
+                    ns("adjust_lot_note"),
+                    "Nota (opcional)",
+                    "",
+                    placeholder = "Ej.: corrección por conteo..."
+                ),
+                footer = tagList(
+                    modalButton("Cancelar"),
+                    actionButton(
+                        ns("confirm_adjust_lot"),
+                        "Confirmar ajuste",
+                        class = "btn-primary"
+                    )
+                )
+            ))
+        })
+
+        observeEvent(input$confirm_adjust_lot, {
+            req(pending_adjust_lot_id())
+
+            qty <- suppressWarnings(as.numeric(input$adjust_lot_qty))
+            if (is.na(qty) || qty <= 0) {
+                showNotification(
+                    "Ingresa una cantidad válida.",
+                    type = "error"
+                )
+                return()
+            }
+
+            direction <- input$adjust_lot_direction
+            signed_qty <- if (identical(direction, "remove")) {
+                -qty
+            } else {
+                qty
+            }
+
+            inv_record <- fetch_inventario(pool, mode = "detailed") |>
+                filter(id_inventario == pending_adjust_lot_id())
+
+            if (nrow(inv_record) == 0) {
+                showNotification(
+                    "No se pudo encontrar el registro",
+                    type = "error"
+                )
+                return()
+            }
+
+            tryCatch(
+                {
+                    register_adjustment(
+                        pool = pool,
+                        product_id = inv_record$id_producto,
+                        type = "ajuste",
+                        quantity = signed_qty,
+                        reason = input$adjust_lot_note,
+                        batch = inv_record$lote,
+                        location_id = inv_record$id_ubicacion,
+                        expiry = inv_record$fecha_vencimiento,
+                        usuario = current_user()
+                    )
+                    showNotification(
+                        "Ajuste registrado correctamente",
+                        type = "message"
+                    )
+                    pending_adjust_lot_id(NULL)
+                    removeModal()
+                    inventario_trigger_local(inventario_trigger_local() + 1)
+                    movimientos_trigger(movimientos_trigger() + 1)
+                },
+                error = function(e) {
+                    showNotification(
+                        paste("Error:", e$message),
+                        type = "error"
+                    )
+                }
+            )
+        })
+
         # confirmar vencimiento rápido
         observeEvent(input$confirm_expiry_quick, {
             req(input$tabla_inventario_rows_selected)
@@ -339,7 +629,7 @@ mod_inventario_server <- function(
                         quantity = -inv_record$cantidad_actual,
                         reason = input$expiry_reason,
                         batch = inv_record$lote,
-                        location = inv_record$ubicacion,
+                        location_id = inv_record$id_ubicacion,
                         expiry = inv_record$fecha_vencimiento,
                         usuario = current_user()
                     )
@@ -400,6 +690,8 @@ mod_inventario_server <- function(
             if (nrow(prods) == 0) {
                 return(p("Este proveedor no tiene productos activos."))
             }
+
+            loc_choices <- build_location_choices()
 
             # crear una grilla de inputs con mejor estilo
             do.call(
@@ -484,12 +776,8 @@ mod_inventario_server <- function(
                                         prods$id_producto[i]
                                     )),
                                     label = NULL,
-                                    choices = c(
-                                        "Adelante" = "adelante",
-                                        "Atrás" = "atras",
-                                        "Freezer" = "freezer"
-                                    ),
-                                    selected = "atras",
+                                    choices = loc_choices,
+                                    selected = "",
                                     width = "100%"
                                 )
                             )
@@ -519,6 +807,14 @@ mod_inventario_server <- function(
                         if (!is.na(qty_val) && qty_val > 0) {
                             expiry_val <- input[[paste0("expiry_prod_", pid)]]
                             loc_val <- input[[paste0("loc_prod_", pid)]]
+                            loc_id <- if (
+                                !is.null(loc_val) &&
+                                    nzchar(loc_val)
+                            ) {
+                                as.integer(loc_val)
+                            } else {
+                                NA
+                            }
 
                             items[[length(items) + 1]] <- list(
                                 id = pid,
@@ -528,11 +824,7 @@ mod_inventario_server <- function(
                                 } else {
                                     NA
                                 },
-                                location = if (!is.null(loc_val)) {
-                                    loc_val
-                                } else {
-                                    "atras"
-                                }
+                                location_id = loc_id
                             )
                         }
                     }
@@ -726,34 +1018,6 @@ mod_inventario_server <- function(
                                 ns("adj_movement_type"),
                                 ns("adj_movement_type")
                             ),
-                            radioButtons(
-                                ns("adj_existing_batch"),
-                                "Lote",
-                                choices = c(
-                                    "Crear nuevo (automático)" = "new",
-                                    "Seleccionar existente" = "existing"
-                                ),
-                                selected = "new",
-                                inline = TRUE
-                            )
-                        ),
-                        conditionalPanel(
-                            condition = sprintf(
-                                "input['%s'] == 'existing' && input['%s'] == false",
-                                ns("adj_existing_batch"),
-                                ns("adj_use_fefo")
-                            ),
-                            selectInput(
-                                ns("adj_batch_select"),
-                                "Seleccionar Lote",
-                                choices = NULL
-                            )
-                        ),
-                        conditionalPanel(
-                            condition = sprintf(
-                                "input['%s'] == 'new'",
-                                ns("adj_existing_batch")
-                            ),
                             textInput(
                                 ns("adj_batch"),
                                 "Código de Lote (opcional)",
@@ -764,17 +1028,13 @@ mod_inventario_server <- function(
                                 "Fecha de vencimiento",
                                 value = NA,
                                 language = "es"
-                            )
-                        ),
-                        selectInput(
-                            ns("adj_location"),
-                            "Ubicación",
-                            choices = c(
-                                "Adelante" = "adelante",
-                                "Atrás" = "atras",
-                                "Freezer" = "freezer"
                             ),
-                            selected = "atras"
+                            selectInput(
+                                ns("adj_location"),
+                                "Ubicación",
+                                choices = build_location_choices(),
+                                selected = ""
+                            )
                         )
                     )
                 ),
@@ -855,81 +1115,6 @@ mod_inventario_server <- function(
             div(class = "text-muted small mb-2", msg)
         })
 
-        # actualizar lotes existentes cuando se selecciona un producto para ajuste
-        observeEvent(input$adj_product, {
-            req(input$adj_product)
-            prod_id <- as.integer(input$adj_product)
-
-            # buscar lotes de este producto
-            inv_det <- fetch_inventario(pool, mode = "detailed") |>
-                filter(id_producto == prod_id)
-
-            batch_choices <- if (nrow(inv_det) > 0) {
-                # crear etiquetas con lote, cantidad y vencimiento
-                labels <- paste0(
-                    ifelse(
-                        is.na(inv_det$lote) | inv_det$lote == "",
-                        "Sin lote",
-                        inv_det$lote
-                    ),
-                    " (",
-                    inv_det$cantidad_actual,
-                    " ",
-                    inv_det$unidad_medida,
-                    ") - Vence: ",
-                    ifelse(
-                        is.na(inv_det$fecha_vencimiento),
-                        "N/A",
-                        format(as.Date(inv_det$fecha_vencimiento), "%d/%m/%Y")
-                    )
-                )
-                setNames(inv_det$lote, labels)
-            } else {
-                NULL
-            }
-
-            updateSelectInput(
-                session,
-                "adj_batch_select",
-                choices = batch_choices
-            )
-        })
-
-        # actualizar opciones de lote según el tipo de movimiento
-        observe({
-            req(input$adj_movement_type)
-            type <- input$adj_movement_type
-
-            # Si es salida o vencimiento, solo se puede seleccionar lote existente
-            if (type %in% c("salida", "vencimiento")) {
-                updateRadioButtons(
-                    session,
-                    "adj_existing_batch",
-                    choices = c("Seleccionar existente" = "existing"),
-                    selected = "existing"
-                )
-            } else {
-                # Para entrada o ajuste, permitir crear nuevo
-                # Mantenemos la selección actual si es posible, si no default a new
-                current <- input$adj_existing_batch
-                selected <- if (!is.null(current) && current == "existing") {
-                    "existing"
-                } else {
-                    "new"
-                }
-
-                updateRadioButtons(
-                    session,
-                    "adj_existing_batch",
-                    choices = c(
-                        "Crear nuevo (automático)" = "new",
-                        "Seleccionar existente" = "existing"
-                    ),
-                    selected = selected
-                )
-            }
-        })
-
         # confirmar ajuste
         observeEvent(input$confirm_adjust, {
             req(input$adj_product, input$adj_movement_type)
@@ -958,15 +1143,6 @@ mod_inventario_server <- function(
                         NA
                     }
 
-                    specific_batch <- isTRUE(
-                        isTRUE(input$show_advanced) &&
-                            !is.null(input$adj_existing_batch) &&
-                            length(input$adj_existing_batch) > 0 &&
-                            !is.na(input$adj_existing_batch) &&
-                            input$adj_existing_batch != "new" &&
-                            !isTRUE(input$adj_use_fefo)
-                    )
-
                     use_fefo <- isTRUE(input$adj_use_fefo)
 
                     qty_input <- suppressWarnings(as.numeric(input$adj_qty))
@@ -985,46 +1161,28 @@ mod_inventario_server <- function(
 
                     # determinar stock base (live) para validar y/o modo absoluto
                     base_qty <- NA
-                    if (specific_batch) {
-                        # si seleccionó un lote específico, buscamos su stock
-                        # el value del select es el lote (string)
-                        lote_sel <- input$adj_batch_select
-                        inv_det <- fetch_inventario(pool, mode = "detailed")
-                        match <- inv_det[
-                            inv_det$id_producto == prod_id &
-                                inv_det$lote == lote_sel,
-                        ]
-                        # nota: si el lote no es único por producto, esto podría fallar.
-                        # asumimos lote único por ahora o tomamos el primero.
-                        if (
-                            nrow(match) > 0 && !is.na(match$cantidad_actual[1])
-                        ) {
-                            base_qty <- match$cantidad_actual[1]
-                        }
+                    # stock total consolidado
+                    inv_cons <- fetch_inventario(
+                        pool,
+                        mode = "consolidated"
+                    )
+                    row <- inv_cons[inv_cons$id_producto == prod_id, ]
+                    if (nrow(row) > 0 && !is.na(row$cantidad_total[1])) {
+                        base_qty <- row$cantidad_total[1]
                     } else {
-                        # stock total consolidado
-                        inv_cons <- fetch_inventario(
-                            pool,
-                            mode = "consolidated"
-                        )
-                        row <- inv_cons[inv_cons$id_producto == prod_id, ]
-                        if (nrow(row) > 0 && !is.na(row$cantidad_total[1])) {
-                            base_qty <- row$cantidad_total[1]
+                        # fallback: sumar detallado
+                        inv_det <- fetch_inventario(pool, mode = "detailed")
+                        det_row <- inv_det[inv_det$id_producto == prod_id, ]
+                        if (
+                            nrow(det_row) > 0 &&
+                                any(!is.na(det_row$cantidad_actual))
+                        ) {
+                            base_qty <- sum(
+                                det_row$cantidad_actual,
+                                na.rm = TRUE
+                            )
                         } else {
-                            # fallback: sumar detallado
-                            inv_det <- fetch_inventario(pool, mode = "detailed")
-                            det_row <- inv_det[inv_det$id_producto == prod_id, ]
-                            if (
-                                nrow(det_row) > 0 &&
-                                    any(!is.na(det_row$cantidad_actual))
-                            ) {
-                                base_qty <- sum(
-                                    det_row$cantidad_actual,
-                                    na.rm = TRUE
-                                )
-                            } else {
-                                base_qty <- 0
-                            }
+                            base_qty <- 0
                         }
                     }
 
@@ -1101,10 +1259,18 @@ mod_inventario_server <- function(
                         return()
                     }
 
-                    # lógica FEFO para salidas/ajustes negativos sin lote específico
+                    if (final_qty < 0 && !use_fefo && !set_absolute) {
+                        showNotification(
+                            "Para descontar un lote específico, usa 'Ajustar lote' o habilita FEFO.",
+                            type = "error"
+                        )
+                        return()
+                    }
+
+                    # lógica FEFO para salidas/ajustes negativos
                     if (
                         final_qty < 0 &&
-                            (use_fefo || (set_absolute && !specific_batch))
+                            (use_fefo || set_absolute)
                     ) {
                         inv_det <- fetch_inventario(pool, mode = "detailed")
                         lots <- inv_det[inv_det$id_producto == prod_id, ]
@@ -1160,7 +1326,7 @@ mod_inventario_server <- function(
                                 quantity = -take,
                                 reason = lot_note,
                                 batch = lots$lote[i],
-                                location = lots$ubicacion[i],
+                                location_id = lots$id_ubicacion[i],
                                 expiry = lots$fecha_vencimiento[i],
                                 usuario = current_user()
                             )
@@ -1186,44 +1352,35 @@ mod_inventario_server <- function(
                     } else {
                         # caso normal (sin FEFO o positivo o lote específico)
 
-                        # determinar lote/ubicación/vencimiento
-                        batch_val <- NULL
-                        # Safely extract location and expiry (they may be NULL if advanced options are hidden)
-                        loc_val <- input$adj_location
-                        if (is.null(loc_val) || length(loc_val) == 0) {
-                            loc_val <- NA
-                        }
-                        exp_val <- input$adj_expiry
-                        if (is.null(exp_val) || length(exp_val) == 0) {
-                            exp_val <- NA
-                        }
+                        # determinar lote/ubicación/vencimiento (solo para entradas/ajustes positivos)
+                        batch_val <- NA
+                        loc_val <- NA
+                        exp_val <- NA
 
-                        if (specific_batch) {
-                            # si es lote específico, usamos sus datos (que ya buscamos arriba si era necesario)
-                            # o simplemente pasamos el lote seleccionado
-                            batch_val <- input$adj_batch_select
-                            # si quisiéramos ser estrictos, deberíamos pasar la ubicación y vencimiento de ese lote
-                            # pero register_adjustment usa batch+location para identificar fila.
-                            # si el lote es único, location podría ser NA en el WHERE si no lo pasamos?
-                            # register_adjustment usa: (lote IS ? ...) AND (ubicacion IS ? ...)
-                            # así que necesitamos pasar la ubicación correcta del lote seleccionado.
-
-                            if (exists("match") && nrow(match) > 0) {
-                                loc_val <- match$ubicacion[1]
-                                exp_val <- match$fecha_vencimiento[1]
-                            }
-                        } else if (
-                            isTRUE(input$show_advanced) &&
-                                !is.null(input$adj_batch) &&
+                        if (isTRUE(input$show_advanced) &&
+                            !type %in% c("salida", "vencimiento")) {
+                            if (!is.null(input$adj_batch) &&
                                 length(input$adj_batch) > 0 &&
                                 !is.na(input$adj_batch) &&
-                                nzchar(input$adj_batch)
-                        ) {
-                            # nuevo lote manual
-                            batch_val <- input$adj_batch
-                        }
-                        if (length(batch_val) == 0) {
-                            batch_val <- NA
+                                nzchar(input$adj_batch)) {
+                                batch_val <- input$adj_batch
+                            }
+
+                            loc_val <- input$adj_location
+                            if (
+                                is.null(loc_val) ||
+                                    length(loc_val) == 0 ||
+                                    !nzchar(loc_val)
+                            ) {
+                                loc_val <- NA
+                            } else {
+                                loc_val <- as.integer(loc_val)
+                            }
+
+                            exp_val <- input$adj_expiry
+                            if (is.null(exp_val) || length(exp_val) == 0) {
+                                exp_val <- NA
+                            }
                         }
 
                         register_adjustment(
@@ -1233,7 +1390,7 @@ mod_inventario_server <- function(
                             quantity = final_qty,
                             reason = note,
                             batch = batch_val,
-                            location = loc_val,
+                            location_id = loc_val,
                             expiry = exp_val,
                             usuario = current_user()
                         )

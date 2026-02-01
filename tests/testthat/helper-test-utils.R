@@ -109,6 +109,19 @@ db_insert_producto <- function(
   db_last_id(pool)
 }
 
+db_insert_ubicacion <- function(
+  pool,
+  nombre = "Ubicacion",
+  activo = 1
+) {
+  DBI::dbExecute(
+    pool,
+    "INSERT INTO ubicaciones (nombre, activo) VALUES (?, ?)",
+    params = list(nombre, as.integer(activo))
+  )
+  db_last_id(pool)
+}
+
 db_insert_pedido <- function(
   pool,
   id_proveedor,
@@ -164,18 +177,18 @@ db_insert_inventario <- function(
   id_producto,
   cantidad_actual = 1,
   lote = NA,
-  ubicacion = NA,
+  id_ubicacion = NA,
   fecha_vencimiento = NA
 ) {
   DBI::dbExecute(
     pool,
-    "INSERT INTO inventario (id_producto, cantidad_actual, lote, ubicacion, fecha_vencimiento)
+    "INSERT INTO inventario (id_producto, cantidad_actual, lote, id_ubicacion, fecha_vencimiento)
      VALUES (?, ?, ?, ?, ?)",
     params = list(
       as.integer(id_producto),
       cantidad_actual,
       lote,
-      ubicacion,
+      id_ubicacion,
       fecha_vencimiento
     )
   )

@@ -55,8 +55,9 @@ server <- function(input, output, session) {
   mod_inventario_server(
     "inventario",
     conn,
-    productos,
+    productos$productos,
     proveedores,
+    productos$ubicaciones,
     movimientos_trigger,
     inventario_trigger,
     current_user = current_user
@@ -67,7 +68,8 @@ server <- function(input, output, session) {
     "pedidos",
     conn,
     proveedores,
-    productos,
+    productos$productos,
+    productos$ubicaciones,
     movimientos_trigger,
     inventario_trigger,
     current_user = current_user,
@@ -94,7 +96,7 @@ server <- function(input, output, session) {
   mod_movimientos_server(
     "movimientos",
     conn,
-    productos,
+    productos$productos,
     movimientos_trigger,
     user_role = current_role
   )

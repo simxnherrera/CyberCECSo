@@ -157,10 +157,22 @@ mod_pagos_server <- function(id, pool, current_user = NULL, user_role = NULL) {
             )
 
             choices <- setNames(data$id_pedido, labels)
+            pedido_ids <- as.character(data$id_pedido)
+            current <- input$pago_pedido
+            selected <- if (
+                !is.null(current) &&
+                    nzchar(current) &&
+                    current %in% pedido_ids
+            ) {
+                current
+            } else {
+                pedido_ids[1]
+            }
             updateSelectInput(
                 session,
                 "pago_pedido",
-                choices = c("Selecciona un pedido" = "", choices)
+                choices = c("Selecciona un pedido" = "", choices),
+                selected = selected
             )
         })
 
