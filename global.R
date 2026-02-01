@@ -63,6 +63,7 @@ source("R/helpers/update_ubicacion.R")
 # eliminar operaciones
 source("R/helpers/delete_proveedor.R")
 source("R/helpers/delete_producto.R")
+source("R/helpers/delete_pedido.R")
 source("R/helpers/delete_pago_proveedor.R")
 source("R/helpers/delete_usuario.R")
 source("R/helpers/delete_ubicacion.R")

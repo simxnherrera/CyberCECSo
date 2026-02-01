@@ -117,6 +117,7 @@ mod_pedidos_server <- function(
         extras_list <- reactiveVal(list())
         pending_receipt <- reactiveVal(NULL)
         pending_status_change <- reactiveVal(NULL)
+        pending_delete_pedido_id <- reactiveVal(NULL)
         kanban_state <- reactiveVal(NULL)
 
         list_ids <- c(
@@ -587,6 +588,13 @@ mod_pedidos_server <- function(
                             class = "btn-success"
                         )
                     },
+                    if (isTRUE(can_create_pedido())) {
+                        actionButton(
+                            ns("btn_delete_pedido"),
+                            "Eliminar pedido",
+                            class = "btn-outline-danger"
+                        )
+                    },
                     modalButton("Cerrar")
                 ),
                 size = "l"
@@ -903,6 +911,58 @@ mod_pedidos_server <- function(
         observeEvent(input$btn_open_recepcion, {
             req(selected_pedido_id())
             open_recepcion_modal(selected_pedido_id())
+        })
+
+        observeEvent(input$btn_delete_pedido, {
+            if (!ensure_can_create()) {
+                return()
+            }
+            req(selected_pedido_id())
+
+            pending_delete_pedido_id(selected_pedido_id())
+
+            showModal(modalDialog(
+                title = "Confirmar eliminación",
+                "¿Está seguro de que desea eliminar este pedido? Esta acción no se puede deshacer.",
+                footer = tagList(
+                    modalButton("Cancelar"),
+                    actionButton(
+                        ns("confirm_delete_pedido"),
+                        "Eliminar",
+                        class = "btn-danger"
+                    )
+                )
+            ))
+        })
+
+        observeEvent(input$confirm_delete_pedido, {
+            if (!ensure_can_create()) {
+                return()
+            }
+            req(pending_delete_pedido_id())
+
+            tryCatch(
+                {
+                    delete_pedido(
+                        pool,
+                        pending_delete_pedido_id(),
+                        usuario = current_user()
+                    )
+                    showNotification(
+                        "Pedido eliminado correctamente",
+                        type = "message"
+                    )
+                    pending_delete_pedido_id(NULL)
+                    removeModal()
+                    pedidos_trigger(pedidos_trigger() + 1)
+                },
+                error = function(e) {
+                    showNotification(
+                        paste("Error:", e$message),
+                        type = "error"
+                    )
+                }
+            )
         })
 
         open_recepcion_modal <- function(pedido_id) {
