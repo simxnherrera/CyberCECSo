@@ -285,6 +285,13 @@ mod_inventario_server <- function(
                 )
                 return()
             }
+            if (!isTRUE(as.logical(inv_record$perecedero[1]))) {
+                showNotification(
+                    "Solo se puede registrar vencimiento para productos perecederos.",
+                    type = "error"
+                )
+                return()
+            }
 
             showModal(modalDialog(
                 title = "Confirmar registro de vencimiento",
@@ -619,12 +626,26 @@ mod_inventario_server <- function(
                     data <- inventario_data()
                     row <- data[sel_idx, ]
 
-                    inv_record <- fetch_inventario(pool, mode = "detailed") |>
-                        filter(id_inventario == row$id_inventario)
+            inv_record <- fetch_inventario(pool, mode = "detailed") |>
+                filter(id_inventario == row$id_inventario)
+            if (nrow(inv_record) == 0) {
+                showNotification(
+                    "No se pudo encontrar el registro",
+                    type = "error"
+                )
+                return()
+            }
+            if (!isTRUE(as.logical(inv_record$perecedero[1]))) {
+                showNotification(
+                    "Solo se puede registrar vencimiento para productos perecederos.",
+                    type = "error"
+                )
+                return()
+            }
 
-                    register_adjustment(
-                        pool = pool,
-                        product_id = inv_record$id_producto,
+            register_adjustment(
+                pool = pool,
+                product_id = inv_record$id_producto,
                         type = "vencimiento",
                         quantity = -inv_record$cantidad_actual,
                         reason = input$expiry_reason,
