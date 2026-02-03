@@ -22,7 +22,8 @@ mod_proveedores_ui <- function(id) {
                         "Viernes",
                         "Sábado",
                         "N/A"
-                    )
+                    ),
+                    multiple = TRUE
                 ),
                 checkboxInput(ns("pr_activo"), "Activo", TRUE),
                 textAreaInput(ns("pr_notas"), "Notas"),
@@ -96,9 +97,9 @@ mod_proveedores_server <- function(id, pool, user_role = NULL) {
                 data,
                 selection = "single",
                 options = list(pageLength = 10),
-                rownames = FALSE
-            )
-        })
+            rownames = FALSE
+        )
+    })
 
         editing_prov_id <- reactiveVal(NULL)
 
@@ -143,7 +144,24 @@ mod_proveedores_server <- function(id, pool, user_role = NULL) {
             updateTextInput(session, "pr_nombre", value = row$nombre)
             updateTextInput(session, "pr_empresa", value = row$empresa)
             updateTextInput(session, "pr_telefono", value = row$telefono)
-            updateSelectInput(session, "pr_dia", selected = row$dia_visita)
+            dias_raw <- row$dia_visita_raw
+            dias_vec <- if (!is.null(dias_raw) &&
+                length(dias_raw) > 0 &&
+                !is.na(dias_raw) &&
+                nzchar(dias_raw) &&
+                grepl("^\\s*\\[", dias_raw)) {
+                as.character(
+                    tryCatch(jsonlite::fromJSON(dias_raw), error = function(e) character(0))
+                )
+            } else if (!is.null(dias_raw) &&
+                length(dias_raw) > 0 &&
+                !is.na(dias_raw) &&
+                nzchar(dias_raw)) {
+                as.character(dias_raw)
+            } else {
+                character(0)
+            }
+            updateSelectInput(session, "pr_dia", selected = dias_vec)
             updateCheckboxInput(
                 session,
                 "pr_activo",
@@ -161,7 +179,7 @@ mod_proveedores_server <- function(id, pool, user_role = NULL) {
             updateTextInput(session, "pr_nombre", value = "")
             updateTextInput(session, "pr_empresa", value = "")
             updateTextInput(session, "pr_telefono", value = "")
-            updateSelectInput(session, "pr_dia", selected = "")
+            updateSelectInput(session, "pr_dia", selected = character(0))
             updateCheckboxInput(session, "pr_activo", value = TRUE)
             updateTextAreaInput(session, "pr_notas", value = "")
             editing_prov_id(NULL)
@@ -172,32 +190,64 @@ mod_proveedores_server <- function(id, pool, user_role = NULL) {
             if (!require_admin()) {
                 return()
             }
-            req(input$pr_nombre)
+            if (
+                is.null(input$pr_nombre) || !nzchar(input$pr_nombre) ||
+                    is.null(input$pr_empresa) || !nzchar(input$pr_empresa) ||
+                    is.null(input$pr_telefono) || !nzchar(input$pr_telefono) ||
+                    length(input$pr_dia) == 0
+            ) {
+                showNotification(
+                    "Completa todos los campos del proveedor.",
+                    type = "error"
+                )
+                return()
+            }
 
             data <- list(
                 nombre = input$pr_nombre,
                 empresa = input$pr_empresa,
                 telefono = input$pr_telefono,
-                dia_visita = if (nzchar(input$pr_dia)) input$pr_dia else NA,
+                dia_visita = if (length(input$pr_dia) > 0) {
+                    jsonlite::toJSON(unname(input$pr_dia), auto_unbox = TRUE)
+                } else {
+                    NA
+                },
                 activo = as.integer(isTRUE(input$pr_activo)),
                 notas = input$pr_notas
             )
 
-            if (is.null(editing_prov_id())) {
-                insert_proveedor(pool, data)
-                showNotification("Proveedor guardado", type = "message")
-            } else {
-                update_proveedor(pool, editing_prov_id(), data)
-                showNotification("Proveedor actualizado", type = "message")
-                editing_prov_id(NULL)
-            }
+            tryCatch(
+                {
+                    if (is.null(editing_prov_id())) {
+                        insert_proveedor(pool, data)
+                        showNotification(
+                            "Proveedor guardado",
+                            type = "message"
+                        )
+                    } else {
+                        update_proveedor(pool, editing_prov_id(), data)
+                        showNotification(
+                            "Proveedor actualizado",
+                            type = "message"
+                        )
+                        editing_prov_id(NULL)
+                    }
+                },
+                error = function(e) {
+                    showNotification(
+                        paste("Error:", e$message),
+                        type = "error"
+                    )
+                    return()
+                }
+            )
 
             proveedores(fetch_proveedores(pool))
 
             updateTextInput(session, "pr_nombre", value = "")
             updateTextInput(session, "pr_empresa", value = "")
             updateTextInput(session, "pr_telefono", value = "")
-            updateSelectInput(session, "pr_dia", selected = "")
+            updateSelectInput(session, "pr_dia", selected = character(0))
             updateCheckboxInput(session, "pr_activo", value = TRUE)
             updateTextAreaInput(session, "pr_notas", value = "")
         })
@@ -241,7 +291,7 @@ mod_proveedores_server <- function(id, pool, user_role = NULL) {
                     updateTextInput(session, "pr_nombre", value = "")
                     updateTextInput(session, "pr_empresa", value = "")
                     updateTextInput(session, "pr_telefono", value = "")
-                    updateSelectInput(session, "pr_dia", selected = "")
+                    updateSelectInput(session, "pr_dia", selected = character(0))
                     updateCheckboxInput(session, "pr_activo", value = TRUE)
                     updateTextAreaInput(session, "pr_notas", value = "")
                     editing_prov_id(NULL)

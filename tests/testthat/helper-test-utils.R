@@ -70,6 +70,13 @@ db_insert_proveedor <- function(
   dia_visita = NA,
   notas = NA
 ) {
+  if (!is.na(dia_visita)) {
+    if (is.character(dia_visita) && length(dia_visita) == 1 && grepl("^\\s*\\[", dia_visita)) {
+      dia_visita <- dia_visita
+    } else {
+      dia_visita <- jsonlite::toJSON(unname(dia_visita), auto_unbox = TRUE)
+    }
+  }
   DBI::dbExecute(
     pool,
     "INSERT INTO proveedores (nombre, empresa, telefono, dia_visita, activo, notas) VALUES (?, ?, ?, ?, ?, ?)",

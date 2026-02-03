@@ -6,6 +6,7 @@ library(dplyr)
 library(pool)
 library(DT)
 library(sortable)
+library(jsonlite)
 
 sortable::enable_modules()
 

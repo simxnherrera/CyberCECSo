@@ -4,7 +4,7 @@ test_that("insert_proveedor inserts valid provider", {
       nombre = "Prov",
       empresa = "Emp",
       telefono = "123",
-      dia_visita = "Lunes",
+      dia_visita = jsonlite::toJSON(c("Lunes", "Miércoles"), auto_unbox = TRUE),
       activo = 1,
       notas = "ok"
     ))
@@ -22,6 +22,35 @@ test_that("insert_proveedor rejects empty name", {
       dia_visita = NA,
       activo = 1,
       notas = NA
+    )))
+  })
+})
+
+test_that("insert_proveedor rejects missing fields", {
+  with_test_pool(function(pool) {
+    expect_error(insert_proveedor(pool, list(
+      nombre = "Prov",
+      empresa = "",
+      telefono = "123",
+      dia_visita = jsonlite::toJSON(c("Lunes"), auto_unbox = TRUE),
+      activo = 1,
+      notas = "ok"
+    )))
+    expect_error(insert_proveedor(pool, list(
+      nombre = "Prov",
+      empresa = "Emp",
+      telefono = "",
+      dia_visita = jsonlite::toJSON(c("Lunes"), auto_unbox = TRUE),
+      activo = 1,
+      notas = "ok"
+    )))
+    expect_error(insert_proveedor(pool, list(
+      nombre = "Prov",
+      empresa = "Emp",
+      telefono = "123",
+      dia_visita = "",
+      activo = 1,
+      notas = "ok"
     )))
   })
 })
