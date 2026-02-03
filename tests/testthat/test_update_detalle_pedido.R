@@ -14,14 +14,25 @@ test_that("update_detalle_pedido updates quantity and price", {
   })
 })
 
-test_that("update_detalle_pedido errors on negative or missing id", {
+test_that("update_detalle_pedido deletes row on negative quantity", {
   with_test_pool(function(pool) {
     prov <- db_insert_proveedor(pool)
     prod <- db_insert_producto(pool, id_proveedor = prov)
     pedido <- db_insert_pedido(pool, prov)
     det <- db_insert_detalle(pool, pedido, prod)
 
-    expect_error(update_detalle_pedido(pool, det, cantidad_pedida = -1))
+    expect_silent(update_detalle_pedido(pool, det, cantidad_pedida = -1))
+    expect_equal(db_count(pool, "detalle_pedidos"), 0)
+  })
+})
+
+test_that("update_detalle_pedido errors on missing id", {
+  with_test_pool(function(pool) {
+    prov <- db_insert_proveedor(pool)
+    prod <- db_insert_producto(pool, id_proveedor = prov)
+    pedido <- db_insert_pedido(pool, prov)
+    db_insert_detalle(pool, pedido, prod)
+
     expect_error(update_detalle_pedido(pool, 999, cantidad_pedida = 1))
   })
 })

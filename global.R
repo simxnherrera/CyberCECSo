@@ -19,8 +19,27 @@ if (is.null(app_root) || !nzchar(app_root)) {
     app_root <- getwd()
 }
 
-DB_PATH <- file.path(app_root, "data", "cybercecso.sqlite")
-SCHEMA_PATH <- file.path(app_root, "data", "schema.sql")
+resolve_env_path <- function(var_name, default_path) {
+    value <- Sys.getenv(var_name, unset = "")
+    if (!nzchar(value)) {
+        return(default_path)
+    }
+    normalizePath(value, winslash = "/", mustWork = FALSE)
+}
+
+DB_PATH <- resolve_env_path(
+    "CYBERCECSO_DB_PATH",
+    file.path(app_root, "data", "cybercecso.sqlite")
+)
+SCHEMA_PATH <- resolve_env_path(
+    "CYBERCECSO_SCHEMA_PATH",
+    file.path(app_root, "data", "schema.sql")
+)
+WWW_PATH <- file.path(app_root, "www")
+
+if (dir.exists(WWW_PATH)) {
+    shiny::addResourcePath("assets", WWW_PATH)
+}
 
 # base de datos
 source("R/helpers/parse_statements.R")
@@ -41,6 +60,8 @@ source("R/helpers/fetch_pedidos_kanban.R")
 source("R/helpers/fetch_pedido_detalle.R")
 source("R/helpers/fetch_pedido_extras.R")
 source("R/helpers/fetch_pagos_pedido.R")
+source("R/helpers/fetch_plantillas_proveedor.R")
+source("R/helpers/fetch_plantilla_detalle.R")
 source("R/helpers/fetch_usuarios.R")
 
 # insertar operaciones
@@ -49,6 +70,7 @@ source("R/helpers/insert_producto.R")
 source("R/helpers/insert_pedido.R")
 source("R/helpers/insert_pedido_evento.R")
 source("R/helpers/insert_pago_proveedor.R")
+source("R/helpers/insert_plantilla.R")
 source("R/helpers/insert_usuario.R")
 source("R/helpers/insert_ubicacion.R")
 
@@ -59,6 +81,7 @@ source("R/helpers/update_pedido_estado.R")
 source("R/helpers/update_detalle_pedido.R")
 source("R/helpers/update_pedido_monto.R")
 source("R/helpers/update_pago_proveedor.R")
+source("R/helpers/update_plantilla.R")
 source("R/helpers/update_ubicacion.R")
 
 # eliminar operaciones
@@ -66,6 +89,7 @@ source("R/helpers/delete_proveedor.R")
 source("R/helpers/delete_producto.R")
 source("R/helpers/delete_pedido.R")
 source("R/helpers/delete_pago_proveedor.R")
+source("R/helpers/delete_plantilla.R")
 source("R/helpers/delete_usuario.R")
 source("R/helpers/delete_ubicacion.R")
 
@@ -74,6 +98,7 @@ source("R/helpers/register_purchase_transaction.R")
 source("R/helpers/register_adjustment.R")
 source("R/helpers/register_pedido_recepcion.R")
 source("R/helpers/move_inventario_lote.R")
+source("R/helpers/build_pedido_items_from_plantilla.R")
 
 # modulos
 source("R/modules/mod_proveedores.R")

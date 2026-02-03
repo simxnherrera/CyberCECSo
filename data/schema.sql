@@ -72,6 +72,31 @@ CREATE TABLE pedidos_proveedores (
     FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor)
 );
 
+-- plantillas de pedidos por proveedor
+CREATE TABLE plantillas_pedidos (
+    id_plantilla INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_proveedor INTEGER NOT NULL,
+    nombre TEXT NOT NULL,
+    activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1)),
+    notas TEXT,
+    fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor)
+);
+
+-- detalle de plantillas de pedidos
+CREATE TABLE plantillas_pedidos_detalle (
+    id_detalle INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_plantilla INTEGER NOT NULL,
+    id_producto INTEGER NOT NULL,
+    modo_cantidad TEXT NOT NULL CHECK(modo_cantidad IN ('fijo', 'objetivo')),
+    cantidad_fija REAL,
+    cantidad_objetivo REAL,
+    orden INTEGER,
+    FOREIGN KEY (id_plantilla) REFERENCES plantillas_pedidos(id_plantilla),
+    FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
+);
+
 -- tabla de detalle de pedidos
 CREATE TABLE detalle_pedidos (
     id_detalle INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,6 +192,9 @@ CREATE INDEX idx_movimientos_fecha ON movimientos_stock(fecha);
 CREATE INDEX idx_movimientos_ubicacion ON movimientos_stock(id_ubicacion);
 CREATE INDEX idx_pedidos_proveedor ON pedidos_proveedores(id_proveedor);
 CREATE INDEX idx_pedidos_estado ON pedidos_proveedores(estado);
+CREATE INDEX idx_plantillas_proveedor ON plantillas_pedidos(id_proveedor);
+CREATE INDEX idx_plantillas_detalle_plantilla ON plantillas_pedidos_detalle(id_plantilla);
+CREATE INDEX idx_plantillas_detalle_producto ON plantillas_pedidos_detalle(id_producto);
 CREATE INDEX idx_detalle_pedido ON detalle_pedidos(id_pedido);
 CREATE INDEX idx_recepciones_pedido ON recepciones_pedidos(id_pedido);
 CREATE INDEX idx_recepciones_detalle_pedido ON recepciones_detalle(id_pedido);

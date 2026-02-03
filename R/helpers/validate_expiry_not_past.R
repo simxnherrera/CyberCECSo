@@ -20,8 +20,8 @@ validate_expiry_not_past <- function(expiry, quantity = NULL) {
         stop("Fecha de vencimiento invalida.")
     }
 
-    if (expiry_date < Sys.Date()) {
-        stop("La fecha de vencimiento no puede ser anterior a hoy.")
+    if (expiry_date <= Sys.Date()) {
+        stop("La fecha de vencimiento debe ser posterior a hoy.")
     }
 
     invisible(TRUE)

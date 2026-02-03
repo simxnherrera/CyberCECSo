@@ -20,7 +20,7 @@ test_that("apply_schema errors on missing schema file", {
   }, schema = "empty")
 })
 
-test_that("apply_schema rolls back on invalid SQL", {
+test_that("apply_schema stops on invalid SQL without transaction", {
   with_test_pool(function(pool) {
     schema_file <- tempfile(fileext = ".sql")
     writeLines(c(
@@ -30,6 +30,6 @@ test_that("apply_schema rolls back on invalid SQL", {
     on.exit(unlink(schema_file), add = TRUE)
 
     expect_error(apply_schema(pool, schema_path = schema_file))
-    expect_false(DBI::dbExistsTable(pool, "t3"))
+    expect_true(DBI::dbExistsTable(pool, "t3"))
   }, schema = "empty")
 })

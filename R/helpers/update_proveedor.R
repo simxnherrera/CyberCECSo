@@ -25,7 +25,7 @@ update_proveedor <- function(pool, id, data) {
     }
 
     pool::poolWithTransaction(pool, function(conn) {
-        DBI::dbExecute(
+        updated <- DBI::dbExecute(
             conn,
             "
       UPDATE proveedores
@@ -42,5 +42,9 @@ update_proveedor <- function(pool, id, data) {
                 id
             )
         )
+
+        if (updated == 0) {
+            stop("Proveedor no encontrado.")
+        }
     })
 }

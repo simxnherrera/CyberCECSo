@@ -22,6 +22,17 @@ insert_pago_proveedor <- function(
         }
 
         id_proveedor <- pedido$id_proveedor[1]
+        prov <- DBI::dbGetQuery(
+            conn,
+            "SELECT activo FROM proveedores WHERE id_proveedor = ?",
+            params = list(id_proveedor)
+        )
+        if (nrow(prov) == 0) {
+            stop("Proveedor no encontrado.")
+        }
+        if (!isTRUE(as.logical(prov$activo[1]))) {
+            stop("Proveedor inactivo.")
+        }
         monto <- as.numeric(monto)
         if (is.na(monto) || monto <= 0) {
             stop("Monto invalido.")

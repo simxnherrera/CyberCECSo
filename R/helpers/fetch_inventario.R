@@ -27,6 +27,13 @@ fetch_inventario <- function(
       "
     )
   } else if (mode == "detailed") {
+    if (!is.null(filter_expired) && filter_expired != "all") {
+      valid_filters <- c("vencido", "critico", "proximo", "sin_fecha", "normal")
+      if (!filter_expired %in% valid_filters) {
+        stop("Filtro de vencimiento inválido.")
+      }
+    }
+
     # vista detallada: cada lote con cálculos de vencimiento
     query <- "
       SELECT 

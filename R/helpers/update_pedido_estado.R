@@ -6,9 +6,13 @@ update_pedido_estado <- function(
     detalle_evento = NULL
 ) {
     pedido_id <- as.integer(pedido_id)
+    estados_validos <- c("pendiente", "realizado", "recibido", "cancelado")
+    if (is.null(estado) || !estado %in% estados_validos) {
+        stop("Estado inválido.")
+    }
 
     if (estado == "realizado") {
-        DBI::dbExecute(
+        updated <- DBI::dbExecute(
             conn,
             "
             UPDATE pedidos_proveedores
@@ -18,7 +22,7 @@ update_pedido_estado <- function(
             params = list(estado, pedido_id)
         )
     } else if (estado == "recibido") {
-        DBI::dbExecute(
+        updated <- DBI::dbExecute(
             conn,
             "
             UPDATE pedidos_proveedores
@@ -28,7 +32,7 @@ update_pedido_estado <- function(
             params = list(estado, pedido_id)
         )
     } else {
-        DBI::dbExecute(
+        updated <- DBI::dbExecute(
             conn,
             "
             UPDATE pedidos_proveedores
@@ -37,6 +41,10 @@ update_pedido_estado <- function(
             ",
             params = list(estado, pedido_id)
         )
+    }
+
+    if (updated == 0) {
+        stop("Pedido no encontrado.")
     }
 
     insert_pedido_evento(

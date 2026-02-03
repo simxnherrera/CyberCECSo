@@ -1,6 +1,8 @@
 library(shiny)
 library(bslib)
 
+app_theme <- bs_theme(version = 5, bootswatch = "sketchy")
+
 build_main_tabs <- function(role) {
   is_admin <- identical(role, "admin")
 
@@ -30,7 +32,7 @@ build_main_tabs <- function(role) {
       actionButton(
         "open_users",
         "",
-        icon = icon("user"),
+        icon = tags$i(class = "fas fa-user"),
         class = "btn btn-user-icon",
         title = "Usuarios",
         `aria-label` = "Usuarios"
@@ -45,7 +47,7 @@ build_main_tabs <- function(role) {
 
 # ui
 app_ui <- page_fluid(
-  theme = bs_theme(version = 5, bootswatch = "zephyr"),
+  theme = app_theme,
   tags$style(HTML(
     "
     .tab-content {
@@ -75,8 +77,10 @@ app_ui <- page_fluid(
       background: transparent;
       box-shadow: none;
       transition: transform 120ms ease, box-shadow 120ms ease;
+      color: #212529;
     }
-    .btn-user-icon .fa {
+    .btn-user-icon i,
+    .btn-user-icon svg {
       display: block;
       line-height: 1;
       font-size: 16px;
@@ -85,9 +89,20 @@ app_ui <- page_fluid(
     }
     .btn-user-icon:hover {
       transform: translateY(-1px);
+      background-color: transparent !important;
+      box-shadow: none !important;
+      color: #6c757d;
     }
     .btn-user-icon:active {
       transform: translateY(0);
+      background-color: transparent !important;
+      box-shadow: none !important;
+    }
+    .btn-user-icon:focus,
+    .btn-user-icon:focus-visible {
+      outline: none;
+      background-color: transparent !important;
+      box-shadow: none !important;
     }
     .main-tabs-shell .nav-link[data-value='usuarios'],
     .main-tabs-shell .nav-link[data-bs-target='#main_tabs-usuarios'],
@@ -114,6 +129,13 @@ app_ui <- page_fluid(
     .mfb-component__button--child.action-button[id='.shinymanager_logout']::after {
       content: 'Log out' !important;
     }
+    .app-logo {
+      margin: 12px 0 4px;
+    }
+    .app-logo img {
+      max-height: 45px;
+      width: auto;
+    }
   "
   )),
   tags$script(HTML(
@@ -137,11 +159,40 @@ app_ui <- page_fluid(
       });
     }
 
+    function clearStuckScrollLock() {
+      var hasOpenModal = document.querySelector('.modal.show');
+      if (hasOpenModal) {
+        return;
+      }
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+      document.documentElement.style.removeProperty('overflow');
+      document.documentElement.style.removeProperty('padding-right');
+      document.querySelectorAll('.modal-backdrop').forEach(function(el) {
+        el.remove();
+      });
+    }
+
     document.addEventListener('DOMContentLoaded', updateLogoutLabel);
     document.addEventListener('shiny:connected', updateLogoutLabel);
+    document.addEventListener('shown.bs.tab', function() {
+      window.setTimeout(clearStuckScrollLock, 0);
+    });
+    document.addEventListener('hidden.bs.modal', function() {
+      window.setTimeout(clearStuckScrollLock, 0);
+    });
     "
   )),
+  div(
+    class = "app-logo text-center",
+    tags$img(
+      src = "assets/cecso.jpg",
+      alt = "CyberCECSo",
+      class = "img-fluid"
+    )
+  ),
   uiOutput("main_tabs")
 )
 
-ui <- shinymanager::secure_app(app_ui)
+ui <- shinymanager::secure_app(app_ui, theme = app_theme)

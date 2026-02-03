@@ -15,8 +15,39 @@ schema_path <- function() {
   stop("No se encontró data/schema.sql desde el directorio actual.")
 }
 
+project_root <- function() {
+  schema <- schema_path()
+  normalizePath(file.path(dirname(schema), ".."), winslash = "/", mustWork = TRUE)
+}
+
+schema_without_triggers <- function() {
+  lines <- readLines(schema_path(), warn = FALSE)
+  out <- character(0)
+  in_trigger <- FALSE
+
+  for (line in lines) {
+    if (!in_trigger && grepl("^\\s*CREATE\\s+TRIGGER", line, ignore.case = TRUE)) {
+      in_trigger <- TRUE
+      next
+    }
+
+    if (in_trigger) {
+      if (grepl("^\\s*END\\s*;", line, ignore.case = TRUE)) {
+        in_trigger <- FALSE
+      }
+      next
+    }
+
+    out <- c(out, line)
+  }
+
+  tmp <- tempfile(fileext = ".sql")
+  writeLines(out, tmp)
+  tmp
+}
+
 source_helpers <- function() {
-  helper_dir <- file.path("R", "helpers")
+  helper_dir <- file.path(project_root(), "R", "helpers")
   helper_files <- sort(list.files(helper_dir, pattern = "\\.R$", full.names = TRUE))
   for (f in helper_files) {
     source(f, local = FALSE)
@@ -24,6 +55,47 @@ source_helpers <- function() {
 }
 
 source_helpers()
+
+apply_schema_for_tests <- function(conn, schema_path = schema_path()) {
+  if (!file.exists(schema_path)) {
+    stop("No se encontró el schema en: ", schema_path)
+  }
+
+  lines <- readLines(schema_path, warn = FALSE)
+  filtered_lines <- character(0)
+  trigger_blocks <- list()
+  current_trigger <- character(0)
+  in_trigger <- FALSE
+
+  for (line in lines) {
+    if (!in_trigger && grepl("^\\s*CREATE\\s+TRIGGER", line, ignore.case = TRUE)) {
+      in_trigger <- TRUE
+      current_trigger <- c(line)
+      next
+    }
+
+    if (in_trigger) {
+      current_trigger <- c(current_trigger, line)
+      if (grepl("^\\s*END\\s*;", line, ignore.case = TRUE)) {
+        trigger_blocks[[length(trigger_blocks) + 1]] <- current_trigger
+        current_trigger <- character(0)
+        in_trigger <- FALSE
+      }
+      next
+    }
+
+    filtered_lines <- c(filtered_lines, line)
+  }
+
+  statements <- parse_statements(filtered_lines)
+  for (stmt in statements) {
+    DBI::dbExecute(conn, stmt)
+  }
+
+  for (trigger in trigger_blocks) {
+    DBI::dbExecute(conn, paste(trigger, collapse = "\n"))
+  }
+}
 
 with_test_pool <- function(code, schema = c("full", "empty")) {
   schema <- match.arg(schema)
@@ -37,7 +109,7 @@ with_test_pool <- function(code, schema = c("full", "empty")) {
   }, add = TRUE)
 
   if (schema == "full") {
-    apply_schema(pool, schema_path())
+    apply_schema_for_tests(pool, schema_path())
     ensure_schema_updates(pool)
   }
 

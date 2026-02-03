@@ -14,7 +14,7 @@ test_that("fetch_movimientos applies filters", {
       params = list(prod)
     )
 
-    all_rows <- fetch_movimientos(pool)
+    all_rows <- fetch_movimientos(pool, start_date = "2024-01-01", end_date = "2024-12-31")
     expect_equal(nrow(all_rows), 2)
 
     type_rows <- fetch_movimientos(pool, type = "salida")

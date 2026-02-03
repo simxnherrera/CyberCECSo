@@ -9,6 +9,107 @@ register_purchase_transaction <- function(
 
     pool::poolWithTransaction(pool, function(conn) {
         usuario <- normalize_scalar(usuario)
+
+        provider_id <- as.integer(provider_id)
+        prov <- DBI::dbGetQuery(
+            conn,
+            "SELECT activo FROM proveedores WHERE id_proveedor = ?",
+            params = list(provider_id)
+        )
+        if (nrow(prov) == 0) {
+            stop("Proveedor no encontrado.")
+        }
+        if (!isTRUE(as.logical(prov$activo[1]))) {
+            stop("Proveedor inactivo.")
+        }
+
+        if (length(items) == 0) {
+            stop("No hay items para registrar.")
+        }
+
+        prod_ids <- vapply(
+            items,
+            function(x) as.integer(x$id),
+            integer(1)
+        )
+        qtys <- vapply(
+            items,
+            function(x) suppressWarnings(as.numeric(x$qty)),
+            numeric(1)
+        )
+
+        if (any(is.na(prod_ids))) {
+            stop("Producto inválido en la compra.")
+        }
+        if (any(is.na(qtys) | qtys <= 0)) {
+            stop("Cantidad inválida en la compra.")
+        }
+
+        placeholders <- paste(rep("?", length(prod_ids)), collapse = ",")
+        prod_query <- sprintf(
+            "SELECT id_producto, activo, perecedero, IFNULL(precio_compra, 0) AS precio_compra
+             FROM productos
+             WHERE id_producto IN (%s)",
+            placeholders
+        )
+        prod_data <- DBI::dbGetQuery(
+            conn,
+            prod_query,
+            params = as.list(prod_ids)
+        )
+        if (nrow(prod_data) != length(unique(prod_ids))) {
+            stop("Uno o más productos no existen.")
+        }
+        if (any(prod_data$activo != 1)) {
+            stop("No se puede registrar compra con productos inactivos.")
+        }
+
+        perecedero_map <- setNames(
+            as.logical(prod_data$perecedero),
+            as.character(prod_data$id_producto)
+        )
+        price_map <- setNames(
+            prod_data$precio_compra,
+            as.character(prod_data$id_producto)
+        )
+
+        # validar vencimientos y ubicaciones
+        for (item in items) {
+            prod_id <- as.integer(item$id)
+            qty <- suppressWarnings(as.numeric(item$qty))
+            expiry <- if (
+                !is.null(item$expiry) &&
+                    !is.na(item$expiry) &&
+                    nzchar(item$expiry)
+            ) {
+                item$expiry
+            } else {
+                NA
+            }
+
+            if (isTRUE(perecedero_map[[as.character(prod_id)]]) &&
+                !is.na(qty) && qty > 0 &&
+                (is.null(expiry) || is.na(expiry) || !nzchar(expiry))) {
+                stop("Falta fecha de vencimiento para producto perecedero.")
+            }
+
+            validate_expiry_not_past(expiry, qty)
+
+            if (!is.null(item$location_id) &&
+                !is.na(item$location_id) &&
+                nzchar(as.character(item$location_id))) {
+                loc_id <- as.integer(item$location_id)
+                loc <- DBI::dbGetQuery(
+                    conn,
+                    "SELECT activo FROM ubicaciones WHERE id_ubicacion = ?",
+                    params = list(loc_id)
+                )
+                if (nrow(loc) == 0 || !isTRUE(as.logical(loc$activo[1]))) {
+                    stop("Ubicación no válida.")
+                }
+            }
+        }
+
         # 1. create order
         DBI::dbExecute(
             conn,
@@ -101,7 +202,6 @@ register_purchase_transaction <- function(
                 NA
             }
 
-            validate_expiry_not_past(expiry, qty)
             location_id <- if (
                 !is.null(item$location_id) &&
                     !is.na(item$location_id) &&
@@ -121,12 +221,8 @@ register_purchase_transaction <- function(
 
             if (!is.na(qty) && qty > 0) {
                 # get product price for detail (optional, using current buy price)
-                price <- DBI::dbGetQuery(
-                    conn,
-                    "SELECT precio_compra FROM productos WHERE id_producto = ?",
-                    params = list(prod_id)
-                )$precio_compra
-                if (is.na(price)) {
+                price <- price_map[[as.character(prod_id)]]
+                if (is.null(price) || is.na(price)) {
                     price <- 0
                 }
                 total_amount <- total_amount + (qty * price)
