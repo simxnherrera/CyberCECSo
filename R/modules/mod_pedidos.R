@@ -1371,6 +1371,22 @@ mod_pedidos_server <- function(
         output$pedido_items_ui <- renderUI({
             req(input$pedido_proveedor)
 
+            template_items <- list()
+            template_id <- input$pedido_plantilla
+            if (!is.null(template_id) && nzchar(template_id)) {
+                template_items <- build_pedido_items_from_plantilla(
+                    pool,
+                    as.integer(template_id)
+                )
+            }
+
+            item_map <- list()
+            if (length(template_items) > 0) {
+                for (item in template_items) {
+                    item_map[[as.character(item$id)]] <- item$qty
+                }
+            }
+
             prods <- fetch_productos(
                 pool,
                 provider_id = as.integer(input$pedido_proveedor)
@@ -1383,6 +1399,12 @@ mod_pedidos_server <- function(
             do.call(
                 tagList,
                 lapply(1:nrow(prods), function(i) {
+                    pid <- prods$id_producto[i]
+                    qty <- item_map[[as.character(pid)]]
+                    if (is.null(qty)) {
+                        qty <- NA
+                    }
+
                     div(
                         class = "p-3 border-bottom",
                         div(class = "fw-bold mb-2", prods$nombre_producto[i]),
@@ -1394,12 +1416,9 @@ mod_pedidos_server <- function(
                                 div(
                                     class = "d-flex align-items-center",
                                     numericInput(
-                                        inputId = ns(paste0(
-                                            "pedido_qty_",
-                                            prods$id_producto[i]
-                                        )),
+                                        inputId = ns(paste0("pedido_qty_", pid)),
                                         label = NULL,
-                                        value = NA,
+                                        value = qty,
                                         min = 0,
                                         width = "100%"
                                     ),
@@ -1425,56 +1444,6 @@ mod_pedidos_server <- function(
                     )
                 })
             )
-        })
-
-        observeEvent(input$pedido_plantilla, {
-            req(input$pedido_proveedor)
-
-            prods <- fetch_productos(
-                pool,
-                provider_id = as.integer(input$pedido_proveedor)
-            )
-            if (nrow(prods) == 0) {
-                return()
-            }
-
-            template_id <- input$pedido_plantilla
-            if (is.null(template_id) || !nzchar(template_id)) {
-                for (i in seq_len(nrow(prods))) {
-                    pid <- prods$id_producto[i]
-                    updateNumericInput(
-                        session,
-                        ns(paste0("pedido_qty_", pid)),
-                        value = NA
-                    )
-                }
-                return()
-            }
-
-            items <- build_pedido_items_from_plantilla(
-                pool,
-                as.integer(template_id)
-            )
-
-            item_map <- list()
-            if (length(items) > 0) {
-                for (item in items) {
-                    item_map[[as.character(item$id)]] <- item$qty
-                }
-            }
-
-            for (i in seq_len(nrow(prods))) {
-                pid <- prods$id_producto[i]
-                qty <- item_map[[as.character(pid)]]
-                if (is.null(qty)) {
-                    qty <- NA
-                }
-                updateNumericInput(
-                    session,
-                    ns(paste0("pedido_qty_", pid)),
-                    value = qty
-                )
-            }
         })
 
         observeEvent(input$confirm_pedido, {
