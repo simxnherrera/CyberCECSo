@@ -21,7 +21,7 @@ test_that("insert_pedido creates pedido and detail", {
 test_that("insert_pedido rejects empty items", {
   with_test_pool(function(pool) {
     prov <- db_insert_proveedor(pool)
-    expect_error(insert_pedido(pool, prov, items = list()))
+    expect_error(insert_pedido(pool, prov, items = list(), notas = ""))
   })
 })
 
@@ -31,7 +31,7 @@ test_that("insert_pedido rejects inactive provider or product", {
     prov_activo <- db_insert_proveedor(pool, activo = 1)
     prod_inactivo <- db_insert_producto(pool, id_proveedor = prov_activo, activo = 0)
 
-    expect_error(insert_pedido(pool, prov_inactivo, items = list(list(id = prod_inactivo, qty = 1))))
-    expect_error(insert_pedido(pool, prov_activo, items = list(list(id = prod_inactivo, qty = 1))))
+    expect_error(insert_pedido(pool, prov_inactivo, items = list(list(id = prod_inactivo, qty = 1)), notas = ""))
+    expect_error(insert_pedido(pool, prov_activo, items = list(list(id = prod_inactivo, qty = 1)), notas = ""))
   })
 })

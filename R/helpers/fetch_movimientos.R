@@ -48,5 +48,9 @@ fetch_movimientos <- function(
 
     query <- paste0(query, " ORDER BY m.fecha DESC")
 
-    DBI::dbGetQuery(conn, query, params = params)
+    if (length(params) == 0) {
+        DBI::dbGetQuery(conn, query)
+    } else {
+        DBI::dbGetQuery(conn, query, params = params)
+    }
 }

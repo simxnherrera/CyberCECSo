@@ -72,26 +72,28 @@ test_that("register_pedido_recepcion validates perishable expiry and active prod
     prod_per <- db_insert_producto(pool, id_proveedor = prov, perecedero = 1, activo = 1)
     prod_inactive <- db_insert_producto(pool, id_proveedor = prov, perecedero = 1, activo = 0)
     loc <- db_insert_ubicacion(pool, "Atras")
-    pedido <- db_insert_pedido(pool, prov)
-    det1 <- db_insert_detalle(pool, pedido, prod_per)
-    det2 <- db_insert_detalle(pool, pedido, prod_inactive)
-
+    pedido1 <- db_insert_pedido(pool, prov)
+    det1 <- db_insert_detalle(pool, pedido1, prod_per)
     expect_error(register_pedido_recepcion(
       pool,
-      pedido,
+      pedido1,
       items = list(list(id_detalle = det1, id_producto = prod_per, qty = 1, expiry = NA, location_id = loc))
     ))
 
+    pedido2 <- db_insert_pedido(pool, prov)
+    det2 <- db_insert_detalle(pool, pedido2, prod_per)
     expect_error(register_pedido_recepcion(
       pool,
-      pedido,
-      items = list(list(id_detalle = det1, id_producto = prod_per, qty = 1, expiry = today_date(), location_id = loc))
+      pedido2,
+      items = list(list(id_detalle = det2, id_producto = prod_per, qty = 1, expiry = today_date(), location_id = loc))
     ))
 
+    pedido3 <- db_insert_pedido(pool, prov)
+    det3 <- db_insert_detalle(pool, pedido3, prod_inactive)
     expect_error(register_pedido_recepcion(
       pool,
-      pedido,
-      items = list(list(id_detalle = det2, id_producto = prod_inactive, qty = 1, expiry = future_date(1), location_id = loc))
+      pedido3,
+      items = list(list(id_detalle = det3, id_producto = prod_inactive, qty = 1, expiry = future_date(1), location_id = loc))
     ))
   })
 })
@@ -129,7 +131,7 @@ test_that("register_pedido_recepcion rolls back on error", {
     expect_error(register_pedido_recepcion(
       pool,
       pedido,
-      items = list(list(id_detalle = detalle, id_producto = prod, qty = 1, expiry = today_date(), location_id = loc))
+      items = list(list(id_detalle = detalle, id_producto = prod, qty = 1, expiry = past_date(1), location_id = loc))
     ))
 
     expect_equal(db_count(pool, "recepciones_pedidos"), 0)

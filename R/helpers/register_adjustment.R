@@ -10,7 +10,55 @@ register_adjustment <- function(
     usuario = NULL
 ) {
     pool::poolWithTransaction(pool, function(conn) {
-        validate_expiry_not_past(expiry, quantity)
+        if (is.null(type) || is.na(type)) {
+            stop("Tipo de movimiento no puede ser NA")
+        }
+
+        allowed_types <- c("entrada", "salida", "ajuste", "vencimiento")
+        if (!type %in% allowed_types) {
+            stop("Tipo de movimiento inválido.")
+        }
+
+        qty_val <- suppressWarnings(as.numeric(quantity))
+        if (is.na(qty_val) || qty_val == 0) {
+            stop("Cantidad inválida.")
+        }
+
+        if (type == "entrada" && qty_val < 0) {
+            stop("La entrada debe ser positiva.")
+        }
+        if (type %in% c("salida", "vencimiento") && qty_val > 0) {
+            stop("La salida debe ser negativa.")
+        }
+
+        prod_id <- as.integer(product_id)
+        prod <- DBI::dbGetQuery(
+            conn,
+            "SELECT activo FROM productos WHERE id_producto = ?",
+            params = list(prod_id)
+        )
+        if (nrow(prod) == 0) {
+            stop("Producto no encontrado.")
+        }
+        if (!isTRUE(as.logical(prod$activo[1]))) {
+            stop("Producto inactivo.")
+        }
+
+        if (!is.null(location_id) &&
+            !is.na(location_id) &&
+            nzchar(as.character(location_id))) {
+            loc_id <- as.integer(location_id)
+            loc <- DBI::dbGetQuery(
+                conn,
+                "SELECT activo FROM ubicaciones WHERE id_ubicacion = ?",
+                params = list(loc_id)
+            )
+            if (nrow(loc) == 0 || !isTRUE(as.logical(loc$activo[1]))) {
+                stop("Ubicación no válida.")
+            }
+        }
+
+        validate_expiry_not_past(expiry, qty_val)
 
         # 1. insertar movimiento
         # type must be one of: 'entrada', 'salida', 'ajuste', 'vencimiento'
@@ -31,9 +79,9 @@ register_adjustment <- function(
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ",
             params = list(
-                product_id,
+                prod_id,
                 type,
-                quantity,
+                qty_val,
                 batch,
                 if (is.null(expiry) || is.na(expiry)) {
                     NA
@@ -48,11 +96,7 @@ register_adjustment <- function(
 
         # 2. actualizar inventario
         # La cantidad ya viene con el signo correcto desde mod_inventario
-        qty_change <- quantity
-
-        if (is.na(type)) {
-            stop("Tipo de movimiento no puede ser NA")
-        }
+        qty_change <- qty_val
 
         # verificar si la fila existe
         current_row <- DBI::dbGetQuery(
@@ -62,7 +106,7 @@ register_adjustment <- function(
        AND (lote IS ? OR (lote IS NULL AND ? IS NULL))
        AND (id_ubicacion IS ? OR (id_ubicacion IS NULL AND ? IS NULL))
        LIMIT 1",
-            params = list(product_id, batch, batch, location_id, location_id)
+            params = list(prod_id, batch, batch, location_id, location_id)
         )
 
         if (nrow(current_row) > 0) {
@@ -86,7 +130,7 @@ register_adjustment <- function(
         ",
                 params = list(
                     qty_change,
-                    product_id,
+                    prod_id,
                     batch,
                     batch,
                     location_id,
@@ -105,7 +149,7 @@ register_adjustment <- function(
         VALUES (?, ?, ?, ?, ?)
         ",
                 params = list(
-                    product_id,
+                    prod_id,
                     qty_change,
                     batch,
                     if (is.null(expiry) || is.na(expiry)) {

@@ -82,6 +82,39 @@ ensure_schema_updates <- function(conn) {
     "
     )
 
+    DBI::dbExecute(
+        conn,
+        "
+        CREATE TABLE IF NOT EXISTS plantillas_pedidos (
+            id_plantilla INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_proveedor INTEGER NOT NULL,
+            nombre TEXT NOT NULL,
+            activo INTEGER NOT NULL DEFAULT 1 CHECK(activo IN (0, 1)),
+            notas TEXT,
+            fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            fecha_actualizacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (id_proveedor) REFERENCES proveedores(id_proveedor)
+        )
+    "
+    )
+
+    DBI::dbExecute(
+        conn,
+        "
+        CREATE TABLE IF NOT EXISTS plantillas_pedidos_detalle (
+            id_detalle INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_plantilla INTEGER NOT NULL,
+            id_producto INTEGER NOT NULL,
+            modo_cantidad TEXT NOT NULL CHECK(modo_cantidad IN ('fijo', 'objetivo')),
+            cantidad_fija REAL,
+            cantidad_objetivo REAL,
+            orden INTEGER,
+            FOREIGN KEY (id_plantilla) REFERENCES plantillas_pedidos(id_plantilla),
+            FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
+        )
+    "
+    )
+
     # indices nuevos
     DBI::dbExecute(
         conn,
@@ -106,6 +139,25 @@ ensure_schema_updates <- function(conn) {
     DBI::dbExecute(
         conn,
         "CREATE INDEX IF NOT EXISTS idx_pagos_pedido ON pagos_proveedores(id_pedido)"
+    )
+    DBI::dbExecute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_plantillas_proveedor ON plantillas_pedidos(id_proveedor)"
+    )
+    DBI::dbExecute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_plantillas_detalle_plantilla
+         ON plantillas_pedidos_detalle(id_plantilla)"
+    )
+    DBI::dbExecute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_plantillas_detalle_producto
+         ON plantillas_pedidos_detalle(id_producto)"
+    )
+
+    DBI::dbExecute(
+        conn,
+        "DROP INDEX IF EXISTS idx_plantillas_predeterminada"
     )
 
     add_column_if_missing(conn, "inventario", "id_ubicacion", "INTEGER")

@@ -2,7 +2,7 @@ update_producto <- function(pool, id, data) {
     # data is a list with: nombre_producto, id_proveedor, unidad_medida, precio_compra, precio_venta, categoria, perecedero, cantidad_minima, activo
 
     pool::poolWithTransaction(pool, function(conn) {
-        DBI::dbExecute(
+        updated <- DBI::dbExecute(
             conn,
             "
       UPDATE productos
@@ -22,5 +22,9 @@ update_producto <- function(pool, id, data) {
                 id
             )
         )
+
+        if (updated == 0) {
+            stop("Producto no encontrado.")
+        }
     })
 }

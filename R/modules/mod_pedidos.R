@@ -31,6 +31,16 @@ mod_pedidos_ui <- function(id, can_create_pedido = TRUE) {
               color: #6c757d;
               background: #f9fafb;
             }
+            .kanban-footer-row {
+              display: flex;
+              gap: 16px;
+              margin-top: 0;
+            }
+            .kanban-footer-col {
+              flex: 1 1 0;
+              display: flex;
+              justify-content: center;
+            }
             "
         )),
         card(
@@ -40,10 +50,17 @@ mod_pedidos_ui <- function(id, can_create_pedido = TRUE) {
                 div(
                     class = "d-flex gap-2",
                     if (isTRUE(can_create_pedido)) {
-                        actionButton(
-                            ns("btn_new_pedido"),
-                            "Nuevo pedido",
-                            class = "btn-primary"
+                        tagList(
+                            actionButton(
+                                ns("btn_manage_templates"),
+                                "Plantillas",
+                                class = "btn-outline-secondary"
+                            ),
+                            actionButton(
+                                ns("btn_new_pedido"),
+                                "Nuevo pedido",
+                                class = "btn-primary"
+                            )
                         )
                     }
                 )
@@ -119,6 +136,10 @@ mod_pedidos_server <- function(
         pending_status_change <- reactiveVal(NULL)
         pending_delete_pedido_id <- reactiveVal(NULL)
         kanban_state <- reactiveVal(NULL)
+        recibidos_page_size <- 5
+        recibidos_limit <- reactiveVal(recibidos_page_size)
+        templates_trigger <- reactiveVal(0)
+        template_detail_cache <- reactiveVal(NULL)
 
         list_ids <- c(
             pendientes = ns("pedidos_pendientes"),
@@ -142,6 +163,29 @@ mod_pedidos_server <- function(
             } else {
                 nombre
             }
+        }
+
+        build_provider_choices <- function() {
+            prov <- proveedores_reactive()
+            if (is.null(prov) || nrow(prov) == 0) {
+                return(NULL)
+            }
+            labels <- ifelse(
+                is.na(prov$empresa) | !nzchar(prov$empresa),
+                prov$nombre,
+                paste0(prov$nombre, " (", prov$empresa, ")")
+            )
+            setNames(prov$id_proveedor, labels)
+        }
+
+        build_template_label <- function(row) {
+            prov_label <- if (!is.null(row$proveedor_empresa) &&
+                nzchar(row$proveedor_empresa)) {
+                paste0(row$proveedor_nombre, " (", row$proveedor_empresa, ")")
+            } else {
+                row$proveedor_nombre
+            }
+            paste0(row$nombre, " — ", prov_label)
         }
 
         normalize_date_input <- function(value) {
@@ -260,7 +304,7 @@ mod_pedidos_server <- function(
             )
         }
 
-        output$kanban_ui <- renderUI({
+        get_pedidos_buckets <- function(limit) {
             data <- pedidos_data()
             data <- data[data$estado %in% c(
                 "pendiente",
@@ -268,91 +312,138 @@ mod_pedidos_server <- function(
                 "recibido"
             ), ]
 
-            if (nrow(data) == 0) {
+            pendientes <- data[data$estado == "pendiente", ]
+            realizados <- data[data$estado == "realizado", ]
+            recibidos <- data[data$estado == "recibido", ]
+
+            total_recibidos <- nrow(recibidos)
+            if (is.null(limit) || is.na(limit) || limit < 1) {
+                limit <- recibidos_page_size
+            }
+            if (total_recibidos > 0) {
+                recibidos <- recibidos[seq_len(min(total_recibidos, limit)), , drop = FALSE]
+            }
+
+            list(
+                pendientes = pendientes,
+                realizados = realizados,
+                recibidos = recibidos,
+                total_recibidos = total_recibidos
+            )
+        }
+
+        output$kanban_ui <- renderUI({
+            buckets <- get_pedidos_buckets(recibidos_limit())
+            total_count <- nrow(buckets$pendientes) +
+                nrow(buckets$realizados) +
+                buckets$total_recibidos
+
+            if (total_count == 0) {
                 return(div(
                     class = "kanban-placeholder",
                     "No hay pedidos registrados."
                 ))
             }
 
-            pendientes <- data[data$estado == "pendiente", ]
-            realizados <- data[data$estado == "realizado", ]
-            recibidos <- data[data$estado == "recibido", ]
-
-            pendientes_labels <- if (nrow(pendientes) > 0) {
-                labels <- lapply(seq_len(nrow(pendientes)), function(i) {
-                    build_pedido_card(pendientes[i, ])
+            pendientes_labels <- if (nrow(buckets$pendientes) > 0) {
+                labels <- lapply(seq_len(nrow(buckets$pendientes)), function(i) {
+                    build_pedido_card(buckets$pendientes[i, ])
                 })
-                setNames(labels, as.character(pendientes$id_pedido))
+                setNames(labels, as.character(buckets$pendientes$id_pedido))
             } else {
                 list()
             }
 
-            realizados_labels <- if (nrow(realizados) > 0) {
-                labels <- lapply(seq_len(nrow(realizados)), function(i) {
-                    build_pedido_card(realizados[i, ])
+            realizados_labels <- if (nrow(buckets$realizados) > 0) {
+                labels <- lapply(seq_len(nrow(buckets$realizados)), function(i) {
+                    build_pedido_card(buckets$realizados[i, ])
                 })
-                setNames(labels, as.character(realizados$id_pedido))
+                setNames(labels, as.character(buckets$realizados$id_pedido))
             } else {
                 list()
             }
 
-            recibidos_labels <- if (nrow(recibidos) > 0) {
-                labels <- lapply(seq_len(nrow(recibidos)), function(i) {
-                    build_pedido_card(recibidos[i, ])
+            recibidos_labels <- if (nrow(buckets$recibidos) > 0) {
+                labels <- lapply(seq_len(nrow(buckets$recibidos)), function(i) {
+                    build_pedido_card(buckets$recibidos[i, ])
                 })
-                setNames(labels, as.character(recibidos$id_pedido))
+                setNames(labels, as.character(buckets$recibidos$id_pedido))
             } else {
                 list()
             }
 
-            sortable::bucket_list(
-                header = NULL,
-                group_name = ns("pedidos_kanban"),
-                orientation = "horizontal",
-                sortable::add_rank_list(
-                    text = "Pedidos pendientes",
-                    labels = pendientes_labels,
-                    input_id = list_ids[["pendientes"]],
-                    css_id = list_ids[["pendientes"]]
+            shown_recibidos <- nrow(buckets$recibidos)
+            recibidos_title <- paste0(
+                "Pedidos recibidos (",
+                shown_recibidos,
+                " de ",
+                buckets$total_recibidos,
+                ")"
+            )
+
+            tagList(
+                sortable::bucket_list(
+                    header = NULL,
+                    group_name = ns("pedidos_kanban"),
+                    orientation = "horizontal",
+                    sortable::add_rank_list(
+                        text = "Pedidos pendientes",
+                        labels = pendientes_labels,
+                        input_id = list_ids[["pendientes"]],
+                        css_id = list_ids[["pendientes"]]
+                    ),
+                    sortable::add_rank_list(
+                        text = "Pedidos realizados",
+                        labels = realizados_labels,
+                        input_id = list_ids[["realizados"]],
+                        css_id = list_ids[["realizados"]]
+                    ),
+                    sortable::add_rank_list(
+                        text = recibidos_title,
+                        labels = recibidos_labels,
+                        input_id = list_ids[["recibidos"]],
+                        css_id = list_ids[["recibidos"]]
+                    )
                 ),
-                sortable::add_rank_list(
-                    text = "Pedidos realizados",
-                    labels = realizados_labels,
-                    input_id = list_ids[["realizados"]],
-                    css_id = list_ids[["realizados"]]
-                ),
-                sortable::add_rank_list(
-                    text = "Pedidos recibidos",
-                    labels = recibidos_labels,
-                    input_id = list_ids[["recibidos"]],
-                    css_id = list_ids[["recibidos"]]
-                )
+                if (buckets$total_recibidos > shown_recibidos) {
+                    div(
+                        class = "kanban-footer-row",
+                        div(class = "kanban-footer-col"),
+                        div(class = "kanban-footer-col"),
+                        div(
+                            class = "kanban-footer-col",
+                            actionButton(
+                                ns("recibidos_more"),
+                                "Ver más",
+                                class = "btn btn-sm btn-outline-secondary"
+                            )
+                        )
+                    )
+                }
             )
         })
 
-        observeEvent(pedidos_data(), {
-            data <- pedidos_data()
-            data <- data[data$estado %in% c(
-                "pendiente",
-                "realizado",
-                "recibido"
-            ), ]
+        observeEvent(list(pedidos_data(), recibidos_limit()), {
+            buckets <- get_pedidos_buckets(recibidos_limit())
 
             kanban_state(setNames(
                 list(
-                    as.character(
-                        data$id_pedido[data$estado == "pendiente"]
-                    ),
-                    as.character(
-                        data$id_pedido[data$estado == "realizado"]
-                    ),
-                    as.character(
-                        data$id_pedido[data$estado == "recibido"]
-                    )
+                    as.character(buckets$pendientes$id_pedido),
+                    as.character(buckets$realizados$id_pedido),
+                    as.character(buckets$recibidos$id_pedido)
                 ),
                 unname(list_ids)
             ))
+        })
+
+        observeEvent(input$recibidos_more, {
+            buckets <- get_pedidos_buckets(recibidos_limit())
+            total <- buckets$total_recibidos
+            if (total == 0) {
+                return()
+            }
+            next_limit <- min(total, recibidos_limit() + recibidos_page_size)
+            recibidos_limit(next_limit)
         })
 
         make_status_map <- function(bucket_state) {
@@ -739,18 +830,483 @@ mod_pedidos_server <- function(
             )
         })
 
+        observeEvent(input$btn_manage_templates, {
+            if (!ensure_can_create()) {
+                return()
+            }
+
+            showModal(modalDialog(
+                title = "Plantillas de pedidos",
+                uiOutput(ns("template_select_ui")),
+                uiOutput(ns("template_form_ui")),
+                uiOutput(ns("template_items_ui")),
+                footer = tagList(
+                    actionButton(
+                        ns("template_save"),
+                        "Guardar plantilla",
+                        class = "btn-primary"
+                    ),
+                    actionButton(
+                        ns("template_delete"),
+                        "Eliminar plantilla",
+                        class = "btn-danger"
+                    ),
+                    modalButton("Cerrar")
+                ),
+                size = "l"
+            ))
+        })
+
+        output$template_select_ui <- renderUI({
+            templates_trigger()
+
+            templates <- fetch_plantillas_proveedor(pool)
+            choices <- if (nrow(templates)) {
+                labels <- vapply(
+                    seq_len(nrow(templates)),
+                    function(i) build_template_label(templates[i, ]),
+                    character(1)
+                )
+                setNames(templates$id_plantilla, labels)
+            } else {
+                NULL
+            }
+
+            selectInput(
+                ns("template_selected"),
+                "Plantilla",
+                choices = c("Nueva plantilla" = "", choices),
+                selected = ""
+            )
+        })
+
+        output$template_form_ui <- renderUI({
+            choices_list <- build_provider_choices()
+
+            tagList(
+                selectInput(
+                    ns("template_provider_form"),
+                    "Proveedor",
+                    choices = c("", choices_list),
+                    selected = ""
+                ),
+                textInput(
+                    ns("template_name"),
+                    "Nombre de la plantilla",
+                    value = ""
+                ),
+                checkboxInput(
+                    ns("template_active"),
+                    "Activa",
+                    value = TRUE
+                ),
+                textAreaInput(
+                    ns("template_notes"),
+                    "Notas (opcional)",
+                    value = ""
+                )
+            )
+        })
+
+        output$template_items_ui <- renderUI({
+            req(input$template_provider_form)
+
+            prods <- fetch_productos(
+                pool,
+                provider_id = as.integer(input$template_provider_form)
+            )
+
+            if (nrow(prods) == 0) {
+                return(p("Este proveedor no tiene productos activos."))
+            }
+
+            do.call(
+                tagList,
+                lapply(1:nrow(prods), function(i) {
+                    pid <- prods$id_producto[i]
+                    div(
+                        class = "p-3 border-bottom",
+                        div(class = "fw-bold mb-2", prods$nombre_producto[i]),
+                        div(
+                            class = "row g-2 align-items-center",
+                            div(
+                                class = "col-4",
+                                selectInput(
+                                    ns(paste0("tpl_mode_", pid)),
+                                    "Modo",
+                                    choices = c(
+                                        "Sin usar" = "",
+                                        "Cantidad fija" = "fijo",
+                                        "Cantidad objetivo" = "objetivo"
+                                    ),
+                                    selected = ""
+                                )
+                            ),
+                            div(
+                                class = "col-4",
+                                conditionalPanel(
+                                    condition = sprintf(
+                                        "input['%s'] == 'fijo'",
+                                        ns(paste0("tpl_mode_", pid))
+                                    ),
+                                    numericInput(
+                                        ns(paste0("tpl_fixed_", pid)),
+                                        "Cantidad fija",
+                                        value = NA,
+                                        min = 0,
+                                        width = "100%"
+                                    )
+                                )
+                            ),
+                            div(
+                                class = "col-4",
+                                conditionalPanel(
+                                    condition = sprintf(
+                                        "input['%s'] == 'objetivo'",
+                                        ns(paste0("tpl_mode_", pid))
+                                    ),
+                                    numericInput(
+                                        ns(paste0("tpl_obj_", pid)),
+                                        "Cantidad objetivo",
+                                        value = NA,
+                                        min = 0,
+                                        width = "100%"
+                                    )
+                                )
+                            )
+                        )
+                    )
+                })
+            )
+        })
+
+        observeEvent(input$template_selected, {
+            template_id <- input$template_selected
+            if (is.null(template_id) || !nzchar(template_id)) {
+                updateTextInput(session, "template_name", value = "")
+                updateCheckboxInput(session, "template_active", value = TRUE)
+                updateTextAreaInput(session, "template_notes", value = "")
+                template_detail_cache(NULL)
+
+                provider_id <- input$template_provider_form
+                if (!is.null(provider_id) && nzchar(provider_id)) {
+                    prods <- fetch_productos(
+                        pool,
+                        provider_id = as.integer(provider_id)
+                    )
+                    if (nrow(prods) > 0) {
+                        session$onFlushed(function() {
+                            for (i in seq_len(nrow(prods))) {
+                                pid <- prods$id_producto[i]
+                                updateSelectInput(
+                                    session,
+                                    ns(paste0("tpl_mode_", pid)),
+                                    selected = ""
+                                )
+                                updateNumericInput(
+                                    session,
+                                    ns(paste0("tpl_fixed_", pid)),
+                                    value = NA
+                                )
+                                updateNumericInput(
+                                    session,
+                                    ns(paste0("tpl_obj_", pid)),
+                                    value = NA
+                                )
+                            }
+                        }, once = TRUE)
+                    }
+                }
+                return()
+            }
+
+            template_id <- as.integer(template_id)
+            templates <- fetch_plantillas_proveedor(pool)
+            row <- templates[templates$id_plantilla == template_id, ]
+            if (nrow(row) > 0) {
+                updateSelectInput(
+                    session,
+                    "template_provider_form",
+                    selected = row$id_proveedor[1]
+                )
+                updateTextInput(
+                    session,
+                    "template_name",
+                    value = row$nombre[1]
+                )
+                updateCheckboxInput(
+                    session,
+                    "template_active",
+                    value = isTRUE(as.logical(row$activo[1]))
+                )
+                updateTextAreaInput(
+                    session,
+                    "template_notes",
+                    value = if (!is.na(row$notas[1])) {
+                        row$notas[1]
+                    } else {
+                        ""
+                    }
+                )
+            }
+
+            detalle <- fetch_plantilla_detalle(pool, template_id)
+            template_detail_cache(list(
+                provider_id = row$id_proveedor[1],
+                detalle = detalle
+            ))
+        })
+
+        observeEvent(list(input$template_provider_form, template_detail_cache()), {
+            provider_id <- input$template_provider_form
+            if (is.null(provider_id) || !nzchar(provider_id)) {
+                return()
+            }
+
+            prods <- fetch_productos(
+                pool,
+                provider_id = as.integer(provider_id)
+            )
+            if (nrow(prods) == 0) {
+                return()
+            }
+
+            cache <- template_detail_cache()
+            session$onFlushed(function() {
+                if (!is.null(cache) &&
+                    !is.null(cache$provider_id) &&
+                    as.integer(cache$provider_id) == as.integer(provider_id)) {
+                    detalle <- cache$detalle
+                    detalle_map <- split(detalle, detalle$id_producto)
+
+                    for (i in seq_len(nrow(prods))) {
+                        pid <- prods$id_producto[i]
+                        line <- detalle_map[[as.character(pid)]]
+                        if (!is.null(line) && nrow(line) > 0) {
+                            line <- line[1, ]
+                            updateSelectInput(
+                                session,
+                                ns(paste0("tpl_mode_", pid)),
+                                selected = line$modo_cantidad
+                            )
+                            updateNumericInput(
+                                session,
+                                ns(paste0("tpl_fixed_", pid)),
+                                value = if (!is.na(line$cantidad_fija)) {
+                                    line$cantidad_fija
+                                } else {
+                                    NA
+                                }
+                            )
+                            updateNumericInput(
+                                session,
+                                ns(paste0("tpl_obj_", pid)),
+                                value = if (!is.na(line$cantidad_objetivo)) {
+                                    line$cantidad_objetivo
+                                } else {
+                                    NA
+                                }
+                            )
+                        } else {
+                            updateSelectInput(
+                                session,
+                                ns(paste0("tpl_mode_", pid)),
+                                selected = ""
+                            )
+                            updateNumericInput(
+                                session,
+                                ns(paste0("tpl_fixed_", pid)),
+                                value = NA
+                            )
+                            updateNumericInput(
+                                session,
+                                ns(paste0("tpl_obj_", pid)),
+                                value = NA
+                            )
+                        }
+                    }
+                } else {
+                    for (i in seq_len(nrow(prods))) {
+                        pid <- prods$id_producto[i]
+                        updateSelectInput(
+                            session,
+                            ns(paste0("tpl_mode_", pid)),
+                            selected = ""
+                        )
+                        updateNumericInput(
+                            session,
+                            ns(paste0("tpl_fixed_", pid)),
+                            value = NA
+                        )
+                        updateNumericInput(
+                            session,
+                            ns(paste0("tpl_obj_", pid)),
+                            value = NA
+                        )
+                    }
+                }
+                template_detail_cache(NULL)
+            }, once = TRUE)
+        })
+
+        observeEvent(input$template_save, {
+            if (!ensure_can_create()) {
+                return()
+            }
+            req(input$template_provider_form)
+
+            prods <- fetch_productos(
+                pool,
+                provider_id = as.integer(input$template_provider_form)
+            )
+            if (nrow(prods) == 0) {
+                showNotification(
+                    "Este proveedor no tiene productos activos.",
+                    type = "warning"
+                )
+                return()
+            }
+
+            items <- list()
+            for (i in seq_len(nrow(prods))) {
+                pid <- prods$id_producto[i]
+                mode <- input[[paste0("tpl_mode_", pid)]]
+                if (is.null(mode) || !nzchar(mode)) {
+                    next
+                }
+
+                if (mode == "fijo") {
+                    qty_fixed <- input[[paste0("tpl_fixed_", pid)]]
+                    if (is.null(qty_fixed) || is.na(qty_fixed) || qty_fixed <= 0) {
+                        showNotification(
+                            "Hay cantidades fijas inválidas.",
+                            type = "error"
+                        )
+                        return()
+                    }
+                    items[[length(items) + 1]] <- list(
+                        id = pid,
+                        modo = "fijo",
+                        cantidad_fija = qty_fixed,
+                        cantidad_objetivo = NA,
+                        orden = i
+                    )
+                } else if (mode == "objetivo") {
+                    qty_obj <- input[[paste0("tpl_obj_", pid)]]
+                    if (is.null(qty_obj) || is.na(qty_obj) || qty_obj <= 0) {
+                        showNotification(
+                            "Hay cantidades objetivo inválidas.",
+                            type = "error"
+                        )
+                        return()
+                    }
+                    items[[length(items) + 1]] <- list(
+                        id = pid,
+                        modo = "objetivo",
+                        cantidad_fija = NA,
+                        cantidad_objetivo = qty_obj,
+                        orden = i
+                    )
+                } else {
+                    showNotification(
+                        "Hay líneas con modo inválido.",
+                        type = "error"
+                    )
+                    return()
+                }
+            }
+
+            if (length(items) == 0) {
+                showNotification(
+                    "Asigná al menos una cantidad para crear la plantilla.",
+                    type = "warning"
+                )
+                return()
+            }
+
+            data <- list(
+                id_proveedor = as.integer(input$template_provider_form),
+                nombre = input$template_name,
+                activo = isTRUE(as.logical(input$template_active)),
+                notas = input$template_notes
+            )
+
+            tryCatch(
+                {
+                    template_id <- input$template_selected
+                    if (is.null(template_id) || !nzchar(template_id)) {
+                        new_id <- insert_plantilla(
+                            pool,
+                            data,
+                            items
+                        )
+                        templates_trigger(templates_trigger() + 1)
+                        updateSelectInput(
+                            session,
+                            "template_selected",
+                            selected = new_id
+                        )
+                        showNotification(
+                            "Plantilla creada correctamente",
+                            type = "message"
+                        )
+                    } else {
+                        update_plantilla(
+                            pool,
+                            as.integer(template_id),
+                            data,
+                            items
+                        )
+                        templates_trigger(templates_trigger() + 1)
+                        showNotification(
+                            "Plantilla actualizada correctamente",
+                            type = "message"
+                        )
+                    }
+                },
+                error = function(e) {
+                    showNotification(paste("Error:", e$message), type = "error")
+                }
+            )
+        })
+
+        observeEvent(input$template_delete, {
+            if (!ensure_can_create()) {
+                return()
+            }
+
+            template_id <- input$template_selected
+            if (is.null(template_id) || !nzchar(template_id)) {
+                showNotification(
+                    "Selecciona una plantilla para eliminar.",
+                    type = "warning"
+                )
+                return()
+            }
+
+            tryCatch(
+                {
+                    delete_plantilla(pool, as.integer(template_id))
+                    templates_trigger(templates_trigger() + 1)
+                    updateSelectInput(session, "template_selected", selected = "")
+                    template_detail_cache(NULL)
+                    showNotification(
+                        "Plantilla eliminada correctamente",
+                        type = "message"
+                    )
+                },
+                error = function(e) {
+                    showNotification(paste("Error:", e$message), type = "error")
+                }
+            )
+        })
+
         observeEvent(input$btn_new_pedido, {
             if (!ensure_can_create()) {
                 return()
             }
 
-            prov <- proveedores_reactive()
-            choices_list <- if (nrow(prov)) {
-                labels <- paste0(prov$nombre, " (", prov$empresa, ")")
-                setNames(prov$id_proveedor, labels)
-            } else {
-                NULL
-            }
+            choices_list <- build_provider_choices()
 
             showModal(modalDialog(
                 title = "Nuevo pedido",
@@ -759,6 +1315,7 @@ mod_pedidos_server <- function(
                     "Proveedor",
                     choices = c("", choices_list)
                 ),
+                uiOutput(ns("pedido_plantilla_ui")),
                 dateInput(
                     ns("pedido_fecha_esperada"),
                     "Fecha de entrega esperada",
@@ -781,6 +1338,34 @@ mod_pedidos_server <- function(
                 ),
                 size = "l"
             ))
+        })
+
+        output$pedido_plantilla_ui <- renderUI({
+            req(input$pedido_proveedor)
+
+            templates_trigger()
+
+            templates <- fetch_plantillas_proveedor(
+                pool,
+                as.integer(input$pedido_proveedor)
+            )
+
+            if (nrow(templates) > 0) {
+                templates <- templates[templates$activo == 1, , drop = FALSE]
+            }
+
+            choices <- if (nrow(templates)) {
+                setNames(templates$id_plantilla, templates$nombre)
+            } else {
+                NULL
+            }
+
+            selectInput(
+                ns("pedido_plantilla"),
+                "Plantilla (opcional)",
+                choices = c("Sin plantilla" = "", choices),
+                selected = ""
+            )
         })
 
         output$pedido_items_ui <- renderUI({
@@ -840,6 +1425,56 @@ mod_pedidos_server <- function(
                     )
                 })
             )
+        })
+
+        observeEvent(input$pedido_plantilla, {
+            req(input$pedido_proveedor)
+
+            prods <- fetch_productos(
+                pool,
+                provider_id = as.integer(input$pedido_proveedor)
+            )
+            if (nrow(prods) == 0) {
+                return()
+            }
+
+            template_id <- input$pedido_plantilla
+            if (is.null(template_id) || !nzchar(template_id)) {
+                for (i in seq_len(nrow(prods))) {
+                    pid <- prods$id_producto[i]
+                    updateNumericInput(
+                        session,
+                        ns(paste0("pedido_qty_", pid)),
+                        value = NA
+                    )
+                }
+                return()
+            }
+
+            items <- build_pedido_items_from_plantilla(
+                pool,
+                as.integer(template_id)
+            )
+
+            item_map <- list()
+            if (length(items) > 0) {
+                for (item in items) {
+                    item_map[[as.character(item$id)]] <- item$qty
+                }
+            }
+
+            for (i in seq_len(nrow(prods))) {
+                pid <- prods$id_producto[i]
+                qty <- item_map[[as.character(pid)]]
+                if (is.null(qty)) {
+                    qty <- NA
+                }
+                updateNumericInput(
+                    session,
+                    ns(paste0("pedido_qty_", pid)),
+                    value = qty
+                )
+            }
         })
 
         observeEvent(input$confirm_pedido, {

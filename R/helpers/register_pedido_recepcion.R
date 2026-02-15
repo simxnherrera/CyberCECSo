@@ -11,6 +11,19 @@ register_pedido_recepcion <- function(
         notas <- normalize_scalar(notas)
         usuario <- normalize_scalar(usuario)
 
+        if (length(items) == 0 && length(extras) == 0) {
+            stop("No hay items para recibir.")
+        }
+
+        pedido_row <- DBI::dbGetQuery(
+            conn,
+            "SELECT id_pedido FROM pedidos_proveedores WHERE id_pedido = ?",
+            params = list(pedido_id)
+        )
+        if (nrow(pedido_row) == 0) {
+            stop("Pedido no encontrado.")
+        }
+
         existing <- DBI::dbGetQuery(
             conn,
             "SELECT id_recepcion FROM recepciones_pedidos WHERE id_pedido = ?",
@@ -169,6 +182,23 @@ register_pedido_recepcion <- function(
                 NA
             }
 
+            prod_info <- DBI::dbGetQuery(
+                conn,
+                "SELECT perecedero, activo FROM productos WHERE id_producto = ?",
+                params = list(row$id_producto[1])
+            )
+            if (nrow(prod_info) == 0) {
+                stop("Producto no encontrado.")
+            }
+            if (!isTRUE(as.logical(prod_info$activo[1]))) {
+                stop("Producto inactivo.")
+            }
+            is_perishable <- isTRUE(as.logical(prod_info$perecedero[1]))
+            if (is_perishable && qty > 0 &&
+                (is.null(expiry) || is.na(expiry) || !nzchar(expiry))) {
+                stop("Falta fecha de vencimiento para producto perecedero.")
+            }
+
             validate_expiry_not_past(expiry, qty)
             location_id <- if (
                 !is.null(item$location_id) &&
@@ -178,6 +208,17 @@ register_pedido_recepcion <- function(
                 as.integer(item$location_id)
             } else {
                 NA
+            }
+
+            if (!is.na(location_id)) {
+                loc <- DBI::dbGetQuery(
+                    conn,
+                    "SELECT activo FROM ubicaciones WHERE id_ubicacion = ?",
+                    params = list(location_id)
+                )
+                if (nrow(loc) == 0 || !isTRUE(as.logical(loc$activo[1]))) {
+                    stop("Ubicación no válida.")
+                }
             }
 
             batch <- NA
@@ -298,6 +339,18 @@ register_pedido_recepcion <- function(
                 }
 
                 prod_id <- as.integer(extra$id)
+                prod_info <- DBI::dbGetQuery(
+                    conn,
+                    "SELECT perecedero, activo FROM productos WHERE id_producto = ?",
+                    params = list(prod_id)
+                )
+                if (nrow(prod_info) == 0) {
+                    stop("Producto no encontrado.")
+                }
+                if (!isTRUE(as.logical(prod_info$activo[1]))) {
+                    stop("Producto inactivo.")
+                }
+
                 price <- price_map[[as.character(prod_id)]]
                 if (is.null(price) || is.na(price)) {
                     price <- 0
@@ -313,6 +366,12 @@ register_pedido_recepcion <- function(
                     NA
                 }
 
+                is_perishable <- isTRUE(as.logical(prod_info$perecedero[1]))
+                if (is_perishable && qty > 0 &&
+                    (is.null(expiry) || is.na(expiry) || !nzchar(expiry))) {
+                    stop("Falta fecha de vencimiento para producto perecedero.")
+                }
+
                 validate_expiry_not_past(expiry, qty)
                 location_id <- if (
                     !is.null(extra$location_id) &&
@@ -322,6 +381,17 @@ register_pedido_recepcion <- function(
                     as.integer(extra$location_id)
                 } else {
                     NA
+                }
+
+                if (!is.na(location_id)) {
+                    loc <- DBI::dbGetQuery(
+                        conn,
+                        "SELECT activo FROM ubicaciones WHERE id_ubicacion = ?",
+                        params = list(location_id)
+                    )
+                    if (nrow(loc) == 0 || !isTRUE(as.logical(loc$activo[1]))) {
+                        stop("Ubicación no válida.")
+                    }
                 }
 
                 current_suffix <- number_to_letters(next_index)
