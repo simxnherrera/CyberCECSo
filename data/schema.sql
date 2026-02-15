@@ -213,3 +213,30 @@ BEGIN
     SET fecha_ultima_actualizacion = CURRENT_TIMESTAMP 
     WHERE id_inventario = NEW.id_inventario;
 END;
+
+-- tabla de historial de precios (auditoría automática)
+CREATE TABLE historial_precios (
+    id_historial INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_producto INTEGER NOT NULL,
+    tipo_precio TEXT NOT NULL CHECK(tipo_precio IN ('compra', 'venta')),
+    valor_anterior REAL,
+    valor_nuevo REAL,
+    fecha_cambio DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
+);
+
+-- trigger para guardar cambios de precios automáticamente
+CREATE TRIGGER guardar_cambio_precio
+AFTER UPDATE ON productos
+WHEN OLD.precio_compra <> NEW.precio_compra OR OLD.precio_venta <> NEW.precio_venta
+BEGIN
+    -- Registrar cambio en precio de compra si hubo
+    INSERT INTO historial_precios (id_producto, tipo_precio, valor_anterior, valor_nuevo)
+    SELECT OLD.id_producto, 'compra', OLD.precio_compra, NEW.precio_compra
+    WHERE OLD.precio_compra <> NEW.precio_compra;
+
+    -- Registrar cambio en precio de venta si hubo
+    INSERT INTO historial_precios (id_producto, tipo_precio, valor_anterior, valor_nuevo)
+    SELECT OLD.id_producto, 'venta', OLD.precio_venta, NEW.precio_venta
+    WHERE OLD.precio_venta <> NEW.precio_venta;
+END;
