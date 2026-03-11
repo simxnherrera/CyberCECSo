@@ -12,6 +12,17 @@ Este repo contiene una app Shiny con autenticación por roles y una arquitectura
 - `sortable` para el Kanban de pedidos
 - `shinymanager` + `sodium` para autenticación
 
+**Instalación**
+Para instalar paquetes necesarios desde CRAN:
+
+```r
+install.packages(c(
+  "shiny", "bslib", "DBI", "RSQLite", "pool", "DT",
+  "sortable", "dplyr", "jsonlite", "shinymanager",
+  "sodium", "testthat"
+))
+```
+
 **Estructura**
 - `app.R`: punto de entrada de la app Shiny.
 - `global.R`: carga de paquetes, paths, helpers, módulos y creación del pool.
