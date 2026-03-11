@@ -1,4 +1,4 @@
-crear usuario:
+Crear usuario:
 
 Alta inicial de usuario (ejemplo)
 
@@ -6,5 +6,7 @@ source("global.R")
 insert_usuario(pool, "admin1", "clave-segura", rol = "admin", nombre = "Coordi 1")
 Esto guarda el hash con sodium::password_store, que es lo que valida el login.
 
-Corrí esto: source("global.R")
+Ejemplo: 
+
+source("global.R")
 insert_usuario(pool, "admin_try", "1234", rol = "admin", nombre = "coordi")
